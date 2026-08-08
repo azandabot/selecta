@@ -9,7 +9,7 @@
 # analysed separately, so every one is reported as unused without this.
 # shellcheck disable=SC2034
 
-SELECTA_VERSION=0.2.0
+SELECTA_VERSION=0.3.0
 SELECTA_REPO_URL="https://github.com/azandabot/selecta"
 SELECTA_USER_AGENT="selecta/$SELECTA_VERSION (+$SELECTA_REPO_URL)"
 

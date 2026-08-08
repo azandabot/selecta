@@ -1,0 +1,1 @@
+/selecta:statusline on

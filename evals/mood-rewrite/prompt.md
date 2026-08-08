@@ -1,1 +1,1 @@
-/selecta play aura farming music
+/selecta:selecta play aura farming music

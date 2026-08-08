@@ -1,1 +1,1 @@
-/selecta play me something with a log drum
+/selecta:selecta play me something with a log drum

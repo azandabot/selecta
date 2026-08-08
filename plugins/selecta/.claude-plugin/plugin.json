@@ -1,7 +1,7 @@
 {
   "name": "selecta",
   "displayName": "selecta",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shows what you're playing in your Claude Code status line, whatever you play it with. Optional built-in radio, and a soundtrack per repository.",
   "author": {
     "name": "Azanda",

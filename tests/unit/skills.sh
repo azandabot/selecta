@@ -128,5 +128,24 @@ for f in sorted(pathlib.Path(sys.argv[1]).glob("*/commands/*.toml")):
 print("\n".join(bad))
 PY
 	)"
+# Evals are graded by reading, not by running, so the only thing that can be
+# checked here is that each case is complete. A prompt with no grader states no
+# expectation, and a grader with no prompt grades nothing.
+t_eq "every eval has a prompt and at least one grader" "" "$(
+	for d in "$(dirname "$PLUGINS")"/evals/*/; do
+		[ -d "$d" ] || continue
+		[ -s "$d/prompt.md" ] || printf '%s: no prompt\n' "$(basename "$d")"
+		[ -n "$(find "$d/graders" -name '*.md' 2>/dev/null)" ] ||
+			printf '%s: no grader\n' "$(basename "$d")"
+	done
+)"
+t_eq "the eval index lists every case" "" "$(
+	_idx="$(dirname "$PLUGINS")"/evals/README.md
+	for d in "$(dirname "$PLUGINS")"/evals/*/; do
+		[ -d "$d" ] || continue
+		grep -q "\`$(basename "$d")\`" "$_idx" || basename "$d"
+	done
+)"
+
 t_eq "every plugin ships its commands" "2" \
 	"$(find "$PLUGINS" -maxdepth 2 -name commands -type d | wc -l | tr -d ' ')"

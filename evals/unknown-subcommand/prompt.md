@@ -1,1 +1,1 @@
-/selecta lofi
+/selecta:selecta lofi

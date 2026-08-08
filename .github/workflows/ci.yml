@@ -68,6 +68,18 @@ jobs:
       - name: integration
         run: ./tests/run.sh integration
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
+      - name: the README, the skills and the evals agree with the code
+        # These suites assert documentation claims, so they run without mpv:
+        # a docs failure should be legible on its own, not buried in a matrix
+        # leg that also needs an audio stack.
+        run: ./tests/run.sh unit/docs && ./tests/run.sh unit/skills
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -80,6 +92,7 @@ jobs:
       - name: validate manifests
         run: |
           claude plugin validate plugins/selecta/.claude-plugin/plugin.json --strict
+          claude plugin validate plugins/selecta-youtube/.claude-plugin/plugin.json --strict
           claude plugin validate . --strict
 
   contract:

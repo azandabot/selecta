@@ -1,1 +1,1 @@
-/selecta play lofi
+/selecta:selecta play lofi
