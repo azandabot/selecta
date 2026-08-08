@@ -146,6 +146,27 @@ selecta_sl_write() {
 	return 0
 }
 
+# The installed launcher is a copy, which is what lets it survive a versioned
+# plugin path. Nothing was refreshing that copy, so a status line turned on
+# before an update kept running the launcher it was installed with. Pre-0.3.0
+# launchers cannot start the supervisor, so the bar froze on the last track
+# and never recovered.
+#
+# Only replaces our own file, never settings.json, and never installs one that
+# was not already asked for.
+selecta_sl_refresh_copy() {
+	[ -f "$SELECTA_SL_SCRIPT" ] || return 0
+	_sr_new=$SELECTA_ROOT/statusline/launcher.sh
+	[ -r "$_sr_new" ] || return 0
+	cmp -s "$_sr_new" "$SELECTA_SL_SCRIPT" && return 0
+	cp "$_sr_new" "$SELECTA_SL_SCRIPT.new" 2>/dev/null || return 0
+	chmod 755 "$SELECTA_SL_SCRIPT.new" 2>/dev/null || true
+	mv -f "$SELECTA_SL_SCRIPT.new" "$SELECTA_SL_SCRIPT" 2>/dev/null ||
+		rm -f "$SELECTA_SL_SCRIPT.new" 2>/dev/null
+	selecta_log info "refreshed the status line launcher"
+	return 0
+}
+
 selecta_sl_install() {
 	_si_state=$(selecta_sl_detect)
 	case $_si_state in

@@ -64,6 +64,40 @@ t_eq "colored by default" "$(printf '\033[2mCOLORED\033[0m')" "$(run 40)"
 t_eq "NO_COLOR uses the plain variant" "PLAIN" "$(NO_COLOR=1 run 40)"
 t_eq "TERM=dumb uses the plain variant" "PLAIN" "$(TERM=dumb run 40)"
 
+# --- the installed copy has to keep up with the plugin ------------------------
+# settings.json runs a copy at ~/.claude/selecta/statusline.sh, not the file in
+# the plugin. The copy is what lets a versioned install path stay valid, but
+# nothing was refreshing it, so a status line switched on before an update kept
+# running the launcher it was installed with. Pre-0.3.0 launchers cannot start
+# the supervisor: the bar freezes on the last track and never recovers, and no
+# amount of playing anything fixes it.
+# shellcheck source=lib/statusline.sh
+. "$SELECTA_ROOT/lib/statusline.sh"
+
+t_eq "an absent copy is not conjured into existence" "no" "$(
+	rm -f "$SELECTA_SL_SCRIPT"
+	selecta_sl_refresh_copy
+	[ -f "$SELECTA_SL_SCRIPT" ] && echo yes || echo no
+)"
+
+printf '#!/bin/sh\n# selecta status line\nexit 0\n' >"$SELECTA_SL_SCRIPT"
+chmod 755 "$SELECTA_SL_SCRIPT"
+selecta_sl_refresh_copy
+t_eq "a stale copy is replaced with the shipped launcher" "true" \
+	"$(cmp -s "$SELECTA_ROOT/statusline/launcher.sh" "$SELECTA_SL_SCRIPT" && echo true || echo false)"
+t_eq "the refreshed copy is executable" "true" \
+	"$([ -x "$SELECTA_SL_SCRIPT" ] && echo true || echo false)"
+t_eq "the refreshed copy can start the supervisor" "true" \
+	"$(grep -q 'selecta-supervisor' "$SELECTA_SL_SCRIPT" && echo true || echo false)"
+
+_before=$(selecta_file_mtime "$SELECTA_SL_SCRIPT")
+sleep 1
+selecta_sl_refresh_copy
+t_eq "an up-to-date copy is left alone" "$_before" \
+	"$(selecta_file_mtime "$SELECTA_SL_SCRIPT")"
+t_eq "refreshing leaves no temp file behind" "0" \
+	"$(find "$(dirname "$SELECTA_SL_SCRIPT")" -name '*.new' | wc -l | tr -d ' ')"
+
 # --- adversarial: every one must exit 0 and print nothing harmful ---
 rm -f "$SEG"
 t_eq "missing segment exits 0" "0" "$(code 80)"

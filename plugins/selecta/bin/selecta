@@ -53,6 +53,7 @@ _selecta_write_pointers() {
 	printf '%s\n' "$SELECTA_ROOT" >"$SELECTA_HOME/root" 2>/dev/null || true
 	printf '%s/bin/%s\n' "$SELECTA_ROOT" "$(basename -- "$SELECTA_BIN")" \
 		>"$SELECTA_HOME/bin-path" 2>/dev/null || true
+	selecta_sl_refresh_copy 2>/dev/null || true
 }
 
 usage() {

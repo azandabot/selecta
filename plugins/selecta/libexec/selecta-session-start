@@ -1,12 +1,18 @@
 #!/bin/sh
-# SessionStart hook. Two jobs, both cheap enough to run on every session.
+# SessionStart hook. Three jobs, all cheap enough to run on every session.
 #
 #   1. Refresh ~/.claude/selecta/root. Plugins install under a versioned
 #      directory, so after an update the status line's copy of the launcher
 #      would otherwise point at a path that no longer exists. This heals it
 #      without the user running anything.
 #
-#   2. Once, and only once, mention that the status line exists.
+#   2. Refresh the installed status line launcher. It is a copy outside the
+#      plugin, so a versioned install path cannot break it, but that also
+#      means a plugin update never reached it. A launcher from before 0.3.0
+#      cannot start the supervisor, so the bar freezes on the last thing that
+#      played and never recovers.
+#
+#   3. Once, and only once, mention that the status line exists.
 #
 # The nudge is the only discovery mechanism selecta has: the whole product is
 # a line in the status bar, and nobody installs a status line they were never
@@ -26,6 +32,15 @@ ROOT=${CLAUDE_PLUGIN_ROOT:-}
 mkdir -p "$SELECTA_HOME" 2>/dev/null || exit 0
 printf '%s\n' "$ROOT" >"$SELECTA_HOME/root" 2>/dev/null || true
 printf '%s/bin/selecta\n' "$ROOT" >"$SELECTA_HOME/bin-path" 2>/dev/null || true
+
+_ours=$SELECTA_HOME/statusline.sh
+_shipped=$ROOT/statusline/launcher.sh
+if [ -f "$_ours" ] && [ -r "$_shipped" ] && ! cmp -s "$_shipped" "$_ours"; then
+	cp "$_shipped" "$_ours.new" 2>/dev/null &&
+		chmod 755 "$_ours.new" 2>/dev/null &&
+		mv -f "$_ours.new" "$_ours" 2>/dev/null
+	rm -f "$_ours.new" 2>/dev/null
+fi
 
 FLAG=$SELECTA_HOME/.statusline-offered
 [ -e "$FLAG" ] && exit 0

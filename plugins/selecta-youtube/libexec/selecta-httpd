@@ -33,11 +33,14 @@ from pathlib import Path
 
 HOME = Path(os.environ.get("SELECTA_HOME", str(Path.home() / ".claude" / "selecta")))
 YT_BIN = Path(os.environ["SELECTA_YT_BIN"])
+# Derived rather than read from the environment so the server still starts when
+# it is launched by hand for debugging, with only SELECTA_YT_BIN set.
+YT_ROOT = Path(os.environ.get("SELECTA_YT_ROOT") or YT_BIN.parent.parent)
 RUN = HOME / "run"
 RUN.mkdir(parents=True, exist_ok=True)
 
 TOKEN = secrets.token_urlsafe(24)
-PAGE = (ROOT / "player" / "index.html").read_text(encoding="utf-8")
+PAGE = (YT_ROOT / "player" / "index.html").read_text(encoding="utf-8")
 
 _lock = threading.Lock()
 _queue = []
