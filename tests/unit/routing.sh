@@ -107,4 +107,31 @@ t_eq "resolve consults youtube for a named song" "1" \
 t_eq "resolve reports why youtube was skipped" "1" \
 	"$(grep -c 'nokey | quota)' "$SELECTA_ROOT/bin/selecta")"
 
+# --- regression: resume could not replay a YouTube track --------------------
+# stream_for only had branches for somafm: and rb:, so a youtube: entry fell to
+# the default and resume reported "could not reach that stream" forever. Since
+# YouTube tracks go into the crate and rank top, resume was permanently broken
+# for anyone who had played one.
+t_eq "play routes by backend rather than assuming radio" "1" \
+	"$(grep -cF 'youtube:*) yt_play_card' "$SELECTA_ROOT/bin/selecta")"
+t_eq "stream_for is only reached for stream backends" "1" \
+	"$(grep -cF 'somafm:* | rb:*) start_source' "$SELECTA_ROOT/bin/selecta")"
+t_eq "a stored video is replayed without a search" "1" \
+	"$(grep -cF 'replay, no search used' "$SELECTA_ROOT/bin/selecta")"
+
+# --- regression: a dead top pick ended the command --------------------------
+# resume stuck to the highest-ranked source. If it would not load, the command
+# failed rather than moving to the next thing in the crate.
+# Literal source matches, so the dollar signs must not expand.
+# shellcheck disable=SC2016
+t_eq "resume walks the ranking" "1" \
+	"$(grep -cF 'play_ranked "$_cr_doc"' "$SELECTA_ROOT/bin/selecta")"
+# shellcheck disable=SC2016
+t_eq "next walks the ranking" "1" \
+	"$(grep -cF 'play_ranked "$(jq -nc' "$SELECTA_ROOT/bin/selecta")"
+t_eq "a failed source moves on rather than exiting" "1" \
+	"$(grep -cF 'trying the next source in the crate' "$SELECTA_ROOT/bin/selecta")"
+t_eq "start_source returns instead of dying so callers can fall through" "0" \
+	"$(sed -n '/^start_source()/,/^}/p' "$SELECTA_ROOT/bin/selecta" | grep -c 'selecta_die')"
+
 rm -rf "$SELECTA_HOME"

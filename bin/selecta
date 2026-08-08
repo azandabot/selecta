@@ -158,9 +158,16 @@ stream_for() {
 # is written first so the supervisor has it before the file-loaded event.
 start_source() {
 	_ss_card=$1
-	_ss_urls=$(stream_for "$(printf '%s' "$_ss_card" | jq -r .id)") ||
-		selecta_die "$EX_NETWORK" "could not reach that stream"
-	[ -n "$_ss_urls" ] || selecta_die "$EX_NETWORK" "no playable stream for that source"
+	_ss_urls=$(stream_for "$(printf '%s' "$_ss_card" | jq -r .id)") || {
+		printf 'selecta: could not reach %s\n' \
+			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
+		return "$EX_NETWORK"
+	}
+	[ -n "$_ss_urls" ] || {
+		printf 'selecta: no playable stream for %s\n' \
+			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
+		return "$EX_NETWORK"
+	}
 
 	_ss_first=$(printf '%s\n' "$_ss_urls" | head -1)
 	_ss_mirrors=$(printf '%s\n' "$_ss_urls" | tail -n +2 | jq -R -s 'split("\n")|map(select(length>0))')
@@ -179,17 +186,84 @@ start_source() {
 	_ss_reply=$(selecta_ipc_command "[\"loadfile\",$(printf '%s' "$_ss_first" | jq -R .)]")
 	# Never announce playback we have not seen. The banner used to print
 	# unconditionally, so a dead player still looked like success.
-	printf '%s' "$_ss_reply" | grep -q '"error":"success"' ||
-		selecta_die "$EX_NETWORK" "the player did not accept that stream. Run: selecta doctor"
+	printf '%s' "$_ss_reply" | grep -q '"error":"success"' || {
+		printf 'selecta: the player did not accept that stream. Run: selecta doctor\n' >&2
+		return "$EX_NETWORK"
+	}
 
 	if wait_until_playing 40; then
 		printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
 	else
 		printf 'selecta: %s was accepted but never started playing.\n' \
 			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
-		printf 'The stream may be down. Try: selecta next\n' >&2
-		exit "$EX_NETWORK"
+		return "$EX_NETWORK"
 	fi
+}
+
+# Replays a YouTube track straight from its stored video id. No search, so a
+# replay costs nothing against the daily quota.
+yt_play_card() {
+	_yp_card=$1
+	_yp_vid=$(printf '%s' "$_yp_card" | jq -r '.resolver.id // (.id | sub("^youtube:"; ""))')
+	[ -n "$_yp_vid" ] && [ "$_yp_vid" != null ] || {
+		printf 'selecta: that crate entry has no video id\n' >&2
+		return "$EX_NOTFOUND"
+	}
+	selecta_ensure_dirs || return "$EX_UNWRITABLE"
+	jq -nc --argjson c "[$(printf '%s' "$_yp_card" | jq -c '. + {videoId: "'"$_yp_vid"'"}')]" \
+		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
+		'{candidates: $c, repo: $repo}' | selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
+	yt_ensure_window || return "$EX_NETWORK"
+	selecta_state_write stopped 2>/dev/null || true
+	selecta_yt_advance || return "$EX_NOTFOUND"
+	if wait_until_playing 60; then
+		printf '▶ %s\n' "$(selecta_state_read | jq -r '.now.title // "?"')"
+		printf '  in the selecta window · via YouTube · replay, no search used\n'
+		return 0
+	fi
+	printf 'selecta: %s did not start. The video may have been removed.\n' \
+		"$(printf '%s' "$_yp_card" | jq -r .title)" >&2
+	return "$EX_NETWORK"
+}
+
+# Routes a crate entry to the backend that can actually play it. Without this,
+# a YouTube entry went down the radio path, stream_for had no branch for it,
+# and resume reported "could not reach that stream" forever.
+play_source() {
+	case $(printf '%s' "$1" | jq -r .id) in
+	youtube:*) yt_play_card "$1" ;;
+	somafm:* | rb:*) start_source "$1" ;;
+	*)
+		printf 'selecta: do not know how to play %s\n' \
+			"$(printf '%s' "$1" | jq -r .id)" >&2
+		return "$EX_NOTFOUND"
+		;;
+	esac
+}
+
+# Walks the ranked crate until something plays. A dead top pick used to end the
+# command rather than moving on to the next source.
+play_ranked() {
+	_pr_doc=$1
+	_pr_skip=${2:-}
+	_pr_list=$(selecta_st_rank "$_pr_doc")
+	_pr_n=$(printf '%s' "$_pr_list" | jq 'length')
+	[ "$_pr_n" -gt 0 ] || {
+		printf 'selecta: this crate has no playable sources\n' >&2
+		return "$EX_NOTFOUND"
+	}
+	_pr_i=0
+	while [ "$_pr_i" -lt "$_pr_n" ]; do
+		_pr_card=$(printf '%s' "$_pr_list" | jq -c ".[$_pr_i]")
+		_pr_i=$((_pr_i + 1))
+		[ "$(printf '%s' "$_pr_card" | jq -r .id)" = "$_pr_skip" ] && continue
+        	if play_source "$(printf '%s' "$_pr_card" | jq -c '{id,kind,provider,title,resolver}')"; then
+			return 0
+		fi
+		[ "$_pr_i" -lt "$_pr_n" ] && printf '  trying the next source in the crate…\n' >&2
+	done
+	printf 'selecta: nothing in this crate would play. Try: selecta play <mood>\n' >&2
+	return "$EX_NETWORK"
 }
 
 # Blocks until the state file reports playback, bounded. This is the only
@@ -352,7 +426,8 @@ cmd_play() {
 		exit "$EX_NOTFOUND"
 	fi
 
-	start_source "$(printf '%s' "$_cp_res" | jq -c '.candidates[0]')"
+	play_source "$(printf '%s' "$_cp_res" | jq -c '.candidates[0]')" ||
+		selecta_die "$EX_NETWORK" "could not start that source"
 }
 
 cmd_resume() {
@@ -363,12 +438,10 @@ cmd_resume() {
 		printf 'Starting with your default. Steer it: selecta play <mood>\n'
 		_cr_card=$(selecta_resolve "${_cr_default#somafm:}" | jq -c '.candidates[0]')
 		[ "$_cr_card" != null ] || selecta_die "$EX_NOTFOUND" "default station is not resolvable"
-		start_source "$_cr_card"
+		play_source "$_cr_card" || selecta_die "$EX_NETWORK" "could not start the default station"
 		return 0
 	}
-	_cr_top=$(selecta_st_rank "$_cr_doc" | jq -c '.[0] // empty')
-	[ -n "$_cr_top" ] || selecta_die "$EX_NOTFOUND" "this crate has no playable sources left"
-	start_source "$(printf '%s' "$_cr_top" | jq -c '{id,kind,provider,title,resolver}')"
+	play_ranked "$_cr_doc"
 }
 
 cmd_next() {
@@ -378,13 +451,13 @@ cmd_next() {
 	_cn_ranked=$(selecta_st_rank "$_cn_doc")
 	_cn_count=$(printf '%s' "$_cn_ranked" | jq 'length')
 	[ "$_cn_count" -gt 0 ] || selecta_die "$EX_NOTFOUND" "nothing to rotate to"
-	_cn_next=$(printf '%s' "$_cn_ranked" | jq -c --arg cur "$_cn_cur" '
-		(map(.id) | index($cur)) as $i
-		| if $i == null then .[0] else .[(($i + 1) % length)] end')
 	# A live radio stream cannot skip a track. Saying so is better than
 	# pretending: the station changes, and the user should know that.
-	printf 'Live radio has no track skip; changing station.\n'
-	start_source "$(printf '%s' "$_cn_next" | jq -c '{id,kind,provider,title,resolver}')"
+	printf 'Moving to the next source in this crate.\n'
+	_cn_rot=$(printf '%s' "$_cn_ranked" | jq -c --arg cur "$_cn_cur" '
+		(map(.id) | index($cur)) as $i
+		| if $i == null then . else (.[($i + 1):] + .[0:($i + 1)]) end')
+	play_ranked "$(jq -nc --argjson s "$_cn_rot" '{sources: $s}')" "$_cn_cur"
 }
 
 # Control has to reach whichever backend is actually playing. These used to
