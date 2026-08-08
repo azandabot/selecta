@@ -4,14 +4,30 @@
     "name": "Azanda",
     "url": "https://github.com/azandabot"
   },
-  "description": "selecta and friends.",
+  "description": "selecta: what's playing, in your status line.",
   "plugins": [
     {
       "name": "selecta",
       "source": "./plugins/selecta",
       "description": "Background music for your coding sessions, in the terminal. Every repository builds its own soundtrack.",
       "category": "creative-media",
-      "tags": ["music", "radio", "statusline", "focus"]
+      "tags": [
+        "music",
+        "radio",
+        "statusline",
+        "focus"
+      ]
+    },
+    {
+      "name": "selecta-youtube",
+      "source": "./plugins/selecta-youtube",
+      "description": "Play one specific track by name, through selecta. Needs a free YouTube Data API key and opens a small visible player window.",
+      "category": "creative-media",
+      "tags": [
+        "music",
+        "youtube",
+        "selecta"
+      ]
     }
   ]
 }

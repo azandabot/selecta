@@ -102,3 +102,15 @@ selecta_repo_soundtrack_file() {
 		sed 's|[^a-z0-9._-]|-|g' | cut -c1-80 | sed 's|-*$||')
 	printf '%s/%s-%s.json' "$SELECTA_SOUNDTRACKS" "$_sf_safe" "$(selecta_sha8 "$_sf_key")"
 }
+
+# The identity as one JSON object, which is how every consumer wants it.
+repo_json() {
+	selecta_repo_identity "$PWD"
+	jq -n --arg key "$SELECTA_REPO_KEY" --arg name "$SELECTA_REPO_NAME" \
+		--arg scope "$SELECTA_REPO_SCOPE" --arg branch "$SELECTA_REPO_BRANCH" \
+		--arg commit "$SELECTA_REPO_COMMIT" \
+		--arg aliasstr "$SELECTA_REPO_ALIASES" \
+		'{key: $key, display_name: $name, scope: $scope, branch: $branch,
+		  commit: $commit,
+		  aliases: ($aliasstr | split("\n") | map(select(length > 0)))}'
+}

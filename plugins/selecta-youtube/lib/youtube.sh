@@ -83,6 +83,14 @@ selecta_yt_search() {
 	[ -n "$_ys_raw" ] || return 1
 	if printf '%s' "$_ys_raw" | jq -e '.error' >/dev/null 2>&1; then
 		selecta_log warn "youtube: $(printf '%s' "$_ys_raw" | jq -r '.error.message // "api error"')"
+		# The reason code is the difference between "your key is fine, the API
+		# is switched off" and "nothing matched", and telling a user the wrong
+		# one costs them an afternoon.
+		case $(printf '%s' "$_ys_raw" | jq -r '.error.errors[0].reason // ""') in
+		accessNotConfigured) return 3 ;;
+		quotaExceeded | rateLimitExceeded | dailyLimitExceeded) return 2 ;;
+		keyInvalid | badRequest | forbidden) return 4 ;;
+		esac
 		return 1
 	fi
 
@@ -147,9 +155,15 @@ selecta_yt_resolve() {
 	# found nothing killed the whole command with no output at all.
 	_yr_rc=0
 	_yr_c=$(selecta_yt_search "$_yr_q") || _yr_rc=$?
-	if [ "$_yr_rc" -eq 2 ]; then
-		jq -nc --arg q "$_yr_q" \
-			'{status:"quota",confidence:0,query:$q,normalized:$q,hint_tags:[],candidates:[]}'
+	case $_yr_rc in
+	2) _yr_st=quota ;;
+	3) _yr_st=notenabled ;;
+	4) _yr_st=badkey ;;
+	*) _yr_st='' ;;
+	esac
+	if [ -n "$_yr_st" ]; then
+		jq -nc --arg q "$_yr_q" --arg s "$_yr_st" \
+			'{status:$s,confidence:0,query:$q,normalized:$q,hint_tags:[],candidates:[]}'
 		return 0
 	fi
 	if [ "$_yr_rc" -ne 0 ] || [ -z "$_yr_c" ]; then
@@ -175,4 +189,32 @@ selecta_yt_alt_search() {
 	_ya_mod=$(printf '%s' "$SELECTA_YT_FALLBACKS" | cut -d'|' -f"$_ya_n")
 	[ -n "$_ya_mod" ] || return 1
 	selecta_yt_search "$_ya_q $_ya_mod"
+}
+
+# One cheap, cached-free call that answers "is this key actually usable". Used
+# only by doctor, where a wrong answer is the whole problem: reporting "key
+# set" for a key that 403s on every request is what sent people looking in the
+# wrong place. videos.list, not search.list, so it costs nothing from the
+# 100/day search bucket.
+selecta_yt_probe() {
+	_yp_key=$(selecta_yt_key) || {
+		printf 'nokey'
+		return 0
+	}
+	_yp_raw=$(curl -sS --max-time 10 -A "$SELECTA_USER_AGENT" \
+		"https://www.googleapis.com/youtube/v3/videos?part=status&id=dQw4w9WgXcQ&key=$_yp_key" 2>/dev/null)
+	[ -n "$_yp_raw" ] || {
+		printf 'unreachable'
+		return 0
+	}
+	if printf '%s' "$_yp_raw" | jq -e '.error' >/dev/null 2>&1; then
+		case $(printf '%s' "$_yp_raw" | jq -r '.error.errors[0].reason // ""') in
+		accessNotConfigured) printf 'notenabled' ;;
+		quotaExceeded | rateLimitExceeded | dailyLimitExceeded) printf 'quota' ;;
+		keyInvalid | badRequest | forbidden) printf 'badkey' ;;
+		*) printf 'unreachable' ;;
+		esac
+		return 0
+	fi
+	printf 'ok'
 }

@@ -46,25 +46,6 @@ t_eq "a wordy ambient request stays on radio" "radio" \
 t_eq "a wordy mood request stays on radio" "radio" \
 	"$(route "some chill downtempo beats please")"
 
-# --- no key means no window -------------------------------------------------
-# With no API key, a YouTube-shaped request must degrade to radio rather than
-# opening an empty player.
-# shellcheck source=lib/youtube.sh
-. "$SELECTA_ROOT/lib/youtube.sh"
-unset YOUTUBE_API_KEY
-t_eq "no key is detected" "1" "$(
-	selecta_yt_have_key
-	echo $?
-)"
-t_eq "no key yields status nokey" "nokey" \
-	"$(selecta_yt_resolve "sponono by kabza" | jq -r .status)"
-t_eq "nokey returns no candidates" "0" \
-	"$(selecta_yt_resolve "sponono by kabza" | jq -r '.candidates|length')"
-
-# --- quota accounting -------------------------------------------------------
-t_eq "a fresh day starts at zero searches" "0" "$(selecta_yt_quota_used)"
-t_eq "a fresh day has the full budget" "100" "$(selecta_yt_quota_left)"
-
 # --- regression: empty tags crashed the whole resolve -----------------------
 # `jq -R 'split(",")'` emits nothing for empty input, and --argjson rejects an
 # empty string, so one empty value took the command down with

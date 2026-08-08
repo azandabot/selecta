@@ -29,8 +29,8 @@ selecta_httpd_start() {
 	selecta_have python3 || return "$EX_MISSING_DEP"
 	rm -f "$SELECTA_RUN/httpd.json" 2>/dev/null
 	# nohup rather than setsid: setsid does not exist on macOS.
-	export SELECTA_HOME SELECTA_ROOT
-	nohup "$SELECTA_ROOT/libexec/selecta-httpd" </dev/null >>"$SELECTA_LOGDIR/httpd.log" 2>&1 &
+	export SELECTA_HOME SELECTA_YT_ROOT SELECTA_YT_BIN
+	nohup "$SELECTA_YT_ROOT/libexec/selecta-httpd" </dev/null >>"$SELECTA_LOGDIR/httpd.log" 2>&1 &
 	_hs=0
 	while [ "$_hs" -lt 100 ]; do
 		selecta_httpd_up && return 0
@@ -83,28 +83,13 @@ selecta_window_open() {
 	return "$EX_MISSING_DEP"
 }
 
-# Liveness is measured by whether the page is still polling, not by whether a
-# browser process exists. Closing the window leaves the browser running with
-# other tabs, so a pid check reports a player that is gone and the next play
-# queues a command nobody will ever read.
-selecta_window_up() {
-	[ -s "$SELECTA_RUN/httpd.json" ] || return 1
-	_wu_o=$(jq -r '.origin // empty' "$SELECTA_RUN/httpd.json" 2>/dev/null)
-	[ -n "$_wu_o" ] || return 1
-	_wu_age=$(curl -sf --max-time 2 "$_wu_o/health" 2>/dev/null |
-		jq -r '.page_age // empty' 2>/dev/null)
-	[ -n "$_wu_age" ] || return 1
-	# Page polls roughly every second; five seconds of silence means gone.
-	awk -v a="$_wu_age" 'BEGIN { exit !(a < 5) }'
-}
-
 yt_ensure_window() {
 	if ! selecta_httpd_start; then
 		if ! selecta_have python3; then
-			printf 'selecta: the YouTube player needs python3.\n\n  %s\n' \
+			printf 'selecta-youtube: the player needs python3.\n\n  %s\n' \
 				"$(selecta_install_hint python3)" >&2
 		else
-			printf 'selecta: the player server would not start. See %s\n' \
+			printf 'selecta-youtube: the player server would not start. See %s\n' \
 				"$SELECTA_LOGDIR/httpd.log" >&2
 		fi
 		return 1
@@ -112,7 +97,7 @@ yt_ensure_window() {
 	selecta_window_up && return 0
 	_yw_url=$(selecta_httpd_url) || return 1
 	selecta_window_open "$_yw_url" || {
-		printf 'selecta: could not open a browser window for the player.\n' >&2
+		printf 'selecta-youtube: could not open a browser window for the player.\n' >&2
 		printf 'Open this yourself and leave it visible:\n  %s\n' "$_yw_url" >&2
 		return 1
 	}
@@ -124,7 +109,7 @@ yt_ensure_window() {
 		_yw_i=$((_yw_i + 1))
 		sleep 0.1
 	done
-	printf 'selecta: the player window did not come up.\n' >&2
+	printf 'selecta-youtube: the player window did not come up.\n' >&2
 	printf 'Open this and leave it visible:\n  %s\n' "$_yw_url" >&2
 	return 1
 }

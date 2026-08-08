@@ -3,5 +3,6 @@ disable=SC3043
 
 # Payload lives under plugins/; `# shellcheck source=lib/...` resolves from there.
 source-path=plugins/selecta
+source-path=plugins/selecta-youtube
 # tests/ stays at the repo root, outside either payload.
 source-path=.

@@ -28,8 +28,6 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/common.sh"
 # shellcheck source=lib/repo.sh
 . "$SELECTA_ROOT/lib/repo.sh"
-# shellcheck source=lib/youtube.sh
-. "$SELECTA_ROOT/lib/youtube.sh"
 # shellcheck source=lib/state.sh
 . "$SELECTA_ROOT/lib/state.sh"
 # shellcheck source=lib/player.sh

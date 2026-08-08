@@ -15,7 +15,7 @@ Bound to loopback only, and every response carries a token the page is given
 at load time, so nothing else on the machine can drive the player.
 
 Started and owned by selecta-supervisor. Writes nothing durable itself: state
-callbacks are handed to `bin/selecta __yt-state`, which reuses the same state
+callbacks are handed to `selecta-youtube __state`, which reuses the same state
 and segment rendering as the radio path.
 """
 
@@ -32,7 +32,7 @@ import urllib.parse
 from pathlib import Path
 
 HOME = Path(os.environ.get("SELECTA_HOME", str(Path.home() / ".claude" / "selecta")))
-ROOT = Path(os.environ["SELECTA_ROOT"])
+YT_BIN = Path(os.environ["SELECTA_YT_BIN"])
 RUN = HOME / "run"
 RUN.mkdir(parents=True, exist_ok=True)
 
@@ -78,7 +78,7 @@ def _quota():
 
 
 def _drain_commands():
-    """Commands are dropped in by bin/selecta as a file, since the client is a
+    """Commands are dropped in as a file by whichever plugin queued them, since
     shell script and should not need an HTTP client to queue one."""
     global _seq
     f = RUN / "yt-cmd.json"
@@ -159,7 +159,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # rather than being reimplemented here. Roughly one call per track.
         try:
             subprocess.run(
-                [str(ROOT / "bin" / "selecta"), "__yt-state"],
+                [str(YT_BIN), "__state"],
                 input=json.dumps(payload),
                 text=True,
                 capture_output=True,
@@ -178,7 +178,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def _notify_shell(payload):
     try:
         subprocess.run(
-            [str(ROOT / "bin" / "selecta"), "__yt-state"],
+            [str(YT_BIN), "__state"],
             input=json.dumps(payload), text=True, capture_output=True,
             timeout=10, check=False,
         )

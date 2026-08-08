@@ -2,7 +2,7 @@
   "name": "selecta",
   "displayName": "selecta",
   "version": "0.2.0",
-  "description": "Background music for your coding sessions, in the terminal. Every repository builds its own soundtrack.",
+  "description": "Shows what you're playing in your Claude Code status line, whatever you play it with. Optional built-in radio, and a soundtrack per repository.",
   "author": {
     "name": "Azanda",
     "url": "https://github.com/azandabot"
@@ -17,15 +17,5 @@
     "focus",
     "somafm",
     "creative-commons"
-  ],
-  "userConfig": {
-    "youtube_api_key": {
-      "type": "string",
-      "title": "YouTube Data API key (optional)",
-      "description": "Enables playing specific songs by name. Free: console.cloud.google.com -> new project -> enable YouTube Data API v3 -> Credentials -> API key. Leave blank and radio still works with no account.",
-      "required": false,
-      "sensitive": false,
-      "default": ""
-    }
-  }
+  ]
 }

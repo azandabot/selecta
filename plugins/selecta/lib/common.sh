@@ -259,3 +259,61 @@ selecta_quarantine() {
 	selecta_log error "quarantined $_q_file -> $_q_dest"
 	return 0
 }
+
+# --- the selecta-youtube boundary --------------------------------------------
+#
+# YouTube lives in its own plugin, because it needs an API key and a visible
+# browser window and most people want neither. The two plugins meet at three
+# files under run/ and nowhere else. Readers live here so selecta can see and
+# control a YouTube track without depending on the plugin that plays it; the
+# starting and searching stay on the other side.
+#
+#   run/httpd.json   written by the player server, read by both
+#   run/yt-cmd.json  a single queued command for the player page
+#   run/yt-queue.json the candidate list the player works through
+
+# Commands are queued as a file rather than posted, so the client stays a shell
+# script with no HTTP client.
+selecta_yt_queue() {
+	printf '%s\n' "$1" | selecta_atomic_write "$SELECTA_RUN/yt-cmd.json"
+}
+
+# Liveness is measured by whether the page is still polling, not by whether a
+# browser process exists. Closing the window leaves the browser running with
+# other tabs, so a pid check reports a player that is gone and the next command
+# is queued for nobody.
+selecta_window_up() {
+	[ -s "$SELECTA_RUN/httpd.json" ] || return 1
+	selecta_have jq || return 1
+	_wu_o=$(jq -r '.origin // empty' "$SELECTA_RUN/httpd.json" 2>/dev/null)
+	[ -n "$_wu_o" ] || return 1
+	selecta_have curl || return 1
+	_wu_age=$(curl -sf --max-time 2 "$_wu_o/health" 2>/dev/null |
+		jq -r '.page_age // empty' 2>/dev/null)
+	[ -n "$_wu_age" ] || return 1
+	# The page polls roughly every second; five seconds of silence means gone.
+	awk -v a="$_wu_age" 'BEGIN { exit !(a < 5) }'
+}
+
+# Never globs the versioned plugin cache path. The pointer is written by
+# selecta-youtube on every run, exactly as selecta writes its own.
+selecta_yt_bin() {
+	if [ -n "${SELECTA_YT_BIN:-}" ] && [ -x "${SELECTA_YT_BIN:-}" ]; then
+		printf '%s' "$SELECTA_YT_BIN"
+		return 0
+	fi
+	if [ -r "$SELECTA_HOME/yt-bin-path" ]; then
+		IFS= read -r _yb <"$SELECTA_HOME/yt-bin-path" 2>/dev/null || _yb=''
+		if [ -n "${_yb:-}" ] && [ -x "$_yb" ]; then
+			printf '%s' "$_yb"
+			return 0
+		fi
+	fi
+	command -v selecta-youtube 2>/dev/null
+}
+
+selecta_yt_install_hint() {
+	printf 'YouTube lives in a companion plugin:\n\n'
+	printf '  /plugin install selecta-youtube@azandabot-selecta\n\n'
+	printf 'Radio needs no key and no window. YouTube needs both.\n'
+}

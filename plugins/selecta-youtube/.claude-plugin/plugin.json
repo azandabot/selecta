@@ -1,0 +1,14 @@
+{
+  "name": "selecta-youtube",
+  "displayName": "selecta for YouTube",
+  "version": "0.3.0",
+  "description": "Play one specific track by name, through selecta. Needs a free YouTube Data API key and opens a small visible player window.",
+  "author": {
+    "name": "Azanda",
+    "url": "https://github.com/azandabot"
+  },
+  "homepage": "https://github.com/azandabot/selecta",
+  "repository": "https://github.com/azandabot/selecta",
+  "license": "MIT",
+  "keywords": ["music", "youtube", "selecta", "statusline"]
+}

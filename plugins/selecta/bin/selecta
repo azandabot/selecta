@@ -40,10 +40,6 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/state.sh"
 # shellcheck source=lib/soundtrack.sh
 . "$SELECTA_ROOT/lib/soundtrack.sh"
-# shellcheck source=lib/youtube.sh
-. "$SELECTA_ROOT/lib/youtube.sh"
-# shellcheck source=lib/window.sh
-. "$SELECTA_ROOT/lib/window.sh"
 # shellcheck source=lib/route.sh
 . "$SELECTA_ROOT/lib/route.sh"
 # shellcheck source=lib/statusline.sh
@@ -55,7 +51,8 @@ export SELECTA_ROOT
 _selecta_write_pointers() {
 	mkdir -p "$SELECTA_HOME" 2>/dev/null || return 0
 	printf '%s\n' "$SELECTA_ROOT" >"$SELECTA_HOME/root" 2>/dev/null || true
-	printf '%s\n' "$SELECTA_BIN" >"$SELECTA_HOME/bin-path" 2>/dev/null || true
+	printf '%s/bin/%s\n' "$SELECTA_ROOT" "$(basename -- "$SELECTA_BIN")" \
+		>"$SELECTA_HOME/bin-path" 2>/dev/null || true
 }
 
 usage() {
@@ -104,17 +101,6 @@ unknown_subcommand() {
 }
 
 # --- helpers ----------------------------------------------------------------
-
-repo_json() {
-	selecta_repo_identity "$PWD"
-	jq -n --arg key "$SELECTA_REPO_KEY" --arg name "$SELECTA_REPO_NAME" \
-		--arg scope "$SELECTA_REPO_SCOPE" --arg branch "$SELECTA_REPO_BRANCH" \
-		--arg commit "$SELECTA_REPO_COMMIT" \
-		--arg aliasstr "$SELECTA_REPO_ALIASES" \
-		'{key: $key, display_name: $name, scope: $scope, branch: $branch,
-		  commit: $commit,
-		  aliases: ($aliasstr | split("\n") | map(select(length > 0)))}'
-}
 
 human_secs() {
 	_hs=${1:-0}
@@ -224,30 +210,17 @@ start_source() {
 	return "$EX_NETWORK"
 }
 
-# Replays a YouTube track straight from its stored video id. No search, so a
-# replay costs nothing against the daily quota.
+# A YouTube entry in the crate can only be replayed by the plugin that put it
+# there. Without selecta-youtube installed the entry is skipped and the
+# rotation moves on, rather than the whole command failing.
 yt_play_card() {
-	_yp_card=$1
-	_yp_vid=$(printf '%s' "$_yp_card" | jq -r '.resolver.id // (.id | sub("^youtube:"; ""))')
-	[ -n "$_yp_vid" ] && [ "$_yp_vid" != null ] || {
-		printf 'selecta: that crate entry has no video id\n' >&2
-		return "$EX_NOTFOUND"
+	_yp_bin=$(selecta_yt_bin) || {
+		printf 'selecta: "%s" came from YouTube, which is a separate plugin.\n\n' \
+			"$(printf '%s' "$1" | jq -r '.title // "that track"')" >&2
+		selecta_yt_install_hint >&2
+		return "$EX_MISSING_DEP"
 	}
-	selecta_ensure_dirs || return "$EX_UNWRITABLE"
-	jq -nc --argjson c "[$(printf '%s' "$_yp_card" | jq -c '. + {videoId: "'"$_yp_vid"'"}')]" \
-		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
-		'{candidates: $c, repo: $repo}' | selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
-	yt_ensure_window || return "$EX_NETWORK"
-	selecta_state_write stopped 2>/dev/null || true
-	selecta_yt_advance || return "$EX_NOTFOUND"
-	if wait_until_playing 60; then
-		printf '▶ %s\n' "$(selecta_state_read | jq -r '.now.title // "?"')"
-		printf '  in the selecta window · via YouTube · replay, no search used\n'
-		return 0
-	fi
-	printf 'selecta: %s did not start. The video may have been removed.\n' \
-		"$(printf '%s' "$_yp_card" | jq -r .title)" >&2
-	return "$EX_NETWORK"
+	printf '%s' "$1" | "$_yp_bin" __replay
 }
 
 # Routes a crate entry to the backend that can actually play it. Without this,
@@ -295,19 +268,6 @@ play_ranked() {
 
 # Blocks until the state file reports playback, bounded. This is the only
 # honest basis for printing a success banner.
-wait_until_playing() {
-	_wp_max=${1:-40}
-	_wp_i=0
-	while [ "$_wp_i" -lt "$_wp_max" ]; do
-		case $(selecta_state_read | jq -r '.status // ""') in
-		playing) return 0 ;;
-		error) return 1 ;;
-		esac
-		_wp_i=$((_wp_i + 1))
-		sleep 0.25
-	done
-	return 1
-}
 
 # --- commands ---------------------------------------------------------------
 
@@ -366,12 +326,6 @@ cmd_status() {
 
 	# Quota is the number people actually need, and the caching rule is the
 	# part that is never obvious: replaying costs nothing.
-	if selecta_yt_have_key; then
-		printf '\n  youtube  %s of %s searches left today · replays and repeats are free\n' \
-			"$(selecta_yt_quota_left)" "$SELECTA_YT_DAILY_SEARCHES"
-	else
-		printf '\n  youtube  no key, radio only. Set one up: selecta doctor\n'
-	fi
 
 	if _cs_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null); then
 		printf '  crate    %s · %s · %s sources · %s tracks\n' \
@@ -410,29 +364,14 @@ cmd_play() {
 	_cp_status=$(printf '%s' "$_cp_res" | jq -r .status)
 
 	if [ "$_cp_force" = yt ] || { [ "$_cp_force" != radio ] && wants_youtube "$_cp_q" "$_cp_res"; }; then
-		_cp_yt=$(selecta_yt_resolve "$_cp_q")
-		case $(printf '%s' "$_cp_yt" | jq -r .status) in
-		ok)
-			_yt_query=$_cp_q
-			yt_start "$(printf '%s' "$_cp_yt" | jq -c .candidates)"
-			return 0
-			;;
-		nokey)
-			printf 'selecta: that looks like a specific track, which needs YouTube.\n' >&2
-			printf 'Add a free API key to enable it:\n\n  selecta config youtube.api_key YOUR_KEY\n\n' >&2
-			printf 'Steps: https://console.cloud.google.com → new project → enable\n' >&2
-			printf '"YouTube Data API v3" → Credentials → Create credentials → API key\n\n' >&2
-			printf 'Falling back to radio.\n' >&2
-			;;
-		quota)
-			printf 'selecta: YouTube search quota is used up for today (100/day).\n' >&2
-			printf 'It resets at midnight Pacific. Falling back to radio.\n' >&2
-			;;
-		*)
-			[ "$_cp_force" = yt ] &&
-				selecta_die "$EX_NOTFOUND" "no embeddable YouTube result for \"$_cp_q\""
-			;;
-		esac
+		if _cp_yb=$(selecta_yt_bin); then
+			exec "$_cp_yb" play "$_cp_q"
+		fi
+		printf 'selecta: "%s" looks like one specific track. Radio cannot pick those.\n\n' \
+			"$_cp_q" >&2
+		selecta_yt_install_hint >&2
+		[ "$_cp_force" = yt ] && exit "$EX_MISSING_DEP"
+		printf '\nPlaying radio instead.\n\n' >&2
 	fi
 
 	if [ "$_cp_status" != ok ]; then
@@ -494,7 +433,7 @@ cmd_next() {
 cmd_pause() {
 	case $(live_backend) in
 	youtube)
-		yt_queue_cmd '{"action":"pause"}'
+		selecta_yt_queue '{"action":"pause"}'
 		printf 'Paused.\n'
 		;;
 	radio)
@@ -508,7 +447,7 @@ cmd_pause() {
 cmd_go() {
 	case $(live_backend) in
 	youtube)
-		yt_queue_cmd '{"action":"play"}'
+		selecta_yt_queue '{"action":"play"}'
 		printf 'Playing.\n'
 		;;
 	radio)
@@ -524,7 +463,7 @@ cmd_stop() {
 	# Both are stopped, not just the live one: a stale backend left running
 	# from an earlier command is exactly what makes "stop" look broken.
 	if selecta_window_up; then
-		yt_queue_cmd '{"action":"stop"}'
+		selecta_yt_queue '{"action":"stop"}'
 		_cst_hit=1
 	fi
 	if selecta_ipc_up; then
@@ -546,10 +485,10 @@ cmd_vol() {
 	if [ "$_cv_back" = youtube ]; then
 		case ${1:-} in
 		'') selecta_die "$EX_USAGE" "volume needs a value in the player window" ;;
-		mute) yt_queue_cmd '{"action":"mute"}' ;;
-		unmute) yt_queue_cmd '{"action":"unmute"}' ;;
+		mute) selecta_yt_queue '{"action":"mute"}' ;;
+		unmute) selecta_yt_queue '{"action":"unmute"}' ;;
 		*[!0-9]*) selecta_die "$EX_USAGE" "youtube volume takes 0-100, mute or unmute" ;;
-		*) yt_queue_cmd "$(jq -nc --argjson v "$1" '{action:"volume",value:$v}')" ;;
+		*) selecta_yt_queue "$(jq -nc --argjson v "$1" '{action:"volume",value:$v}')" ;;
 		esac
 		case ${1:-} in
 		mute | unmute) printf '%sd.\n' "$1" ;;
@@ -773,20 +712,10 @@ cmd_doctor() {
 	printf '  status   %s\n' "$(selecta_sl_detect)"
 	printf '  crates   %s\n' \
 		"$(find "$SELECTA_SOUNDTRACKS" -name '*.json' ! -name index.json 2>/dev/null | wc -l | tr -d ' ')"
-	if selecta_yt_have_key; then
-		printf '  youtube  key set, %s of %s searches left today\n' \
-			"$(selecta_yt_quota_left)" "$SELECTA_YT_DAILY_SEARCHES"
+	if selecta_yt_bin >/dev/null 2>&1; then
+		printf '  youtube  installed · detail: selecta-youtube doctor\n'
 	else
-		printf '  youtube  no key. Radio works without one; named tracks need one:\n'
-		printf '           https://console.cloud.google.com -> new project\n'
-		printf '           -> enable "YouTube Data API v3" -> Credentials -> API key\n'
-		printf '           then: selecta config youtube.api_key YOUR_KEY\n'
-	fi
-	if selecta_have python3; then
-		printf '  window   python3 ok%s\n' \
-			"$(_selecta_chrome_bin >/dev/null 2>&1 && echo ", app-mode browser found" || echo ", default browser fallback")"
-	else
-		printf '  window   MISSING python3 (needed only for the YouTube player)\n'
+		printf '  youtube  not installed (optional, for playing named tracks)\n'
 	fi
 	[ "$_cd_fail" -eq 1 ] && exit "$EX_MISSING_DEP"
 	return 0
@@ -829,160 +758,6 @@ cmd_uninstall() {
 		printf 'Status line removed and player stopped. Crates kept in %s\n' "$SELECTA_HOME"
 		printf 'To delete them too: selecta uninstall --purge\n'
 	fi
-}
-
-# Queues a command for the player page. The page long-polls the local server,
-# which picks the file up; the client stays a shell script with no HTTP client.
-yt_queue_cmd() {
-	printf '%s\n' "$1" | selecta_atomic_write "$SELECTA_RUN/yt-cmd.json"
-}
-
-# Sends the next unplayed candidate to the player. Returns non-zero when the
-# queue is exhausted, which is the caller's signal to report failure honestly
-# rather than silently doing nothing.
-selecta_yt_advance() {
-	_ya_f=$SELECTA_RUN/yt-queue.json
-	[ -s "$_ya_f" ] || return 1
-	_ya_next=$(jq -c '.candidates[0] // empty' "$_ya_f" 2>/dev/null)
-	[ -n "$_ya_next" ] || return 1
-	_ya_repo=$(jq -c '.repo // {}' "$_ya_f" 2>/dev/null)
-	jq -c --arg id "$(printf '%s' "$_ya_next" | jq -r .videoId)" \
-		'.candidates |= .[1:] | .seen += [$id]' "$_ya_f" | selecta_atomic_write "$_ya_f"
-
-	yt_queue_cmd "$(printf '%s' "$_ya_next" | jq -c --argjson repo "$_ya_repo" '{
-		action: "load", videoId: .videoId, title: .title,
-		artist: .artist, sourceId: .id, repo: $repo}')"
-	return 0
-}
-
-# Every candidate came back embed-locked. Rather than giving up, search again
-# with a phrasing that surfaces re-uploads: lyric videos and audio-only posts
-# of the same song are rarely restricted, where the label's own upload almost
-# always is.
-yt_refill() {
-	_yf_f=$SELECTA_RUN/yt-queue.json
-	[ -s "$_yf_f" ] || return 1
-	_yf_q=$(jq -r '.query // ""' "$_yf_f" 2>/dev/null)
-	_yf_n=$(jq -r '.attempt // 0' "$_yf_f" 2>/dev/null)
-	[ -n "$_yf_q" ] || return 1
-	_yf_n=$((_yf_n + 1))
-	# Bounded: each retry is a search, and searches are the scarce resource.
-	[ "$_yf_n" -le 3 ] || return 1
-
-	_yf_new=$(selecta_yt_alt_search "$_yf_q" "$_yf_n") || return 1
-	[ -n "$_yf_new" ] || return 1
-
-	# Anything already rejected is dropped, or the same dead video comes back.
-	_yf_merged=$(jq -nc --argjson new "$_yf_new" --slurpfile old "$_yf_f" '
-		($old[0].seen // []) as $seen
-		| [ $new[] | select((.videoId as $v | $seen | index($v)) == null) ]')
-	[ "$(printf '%s' "$_yf_merged" | jq 'length')" -gt 0 ] || return 1
-
-	jq -c --argjson c "$_yf_merged" --argjson n "$_yf_n" \
-		'.candidates = $c | .attempt = $n' "$_yf_f" | selecta_atomic_write "$_yf_f"
-	selecta_log info "yt: all candidates were embed-locked, retrying as \"$_yf_q $(printf '%s' "$SELECTA_YT_FALLBACKS" | cut -d"|" -f"$_yf_n")\""
-	printf '  every upload of that was embed-locked; looking for another version…\n' >&2
-	return 0
-}
-
-# Starts a YouTube result set: stores the candidates, opens the player window if
-# it is not already up, and sends the first one.
-yt_start() {
-	_yt_cands=$1
-	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
-	jq -nc --argjson c "$(selecta_json_or "$_yt_cands" '[]')" \
-		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
-		--arg q "${_yt_query:-}" \
-		'{candidates: $c, repo: $repo, query: $q, attempt: 0, seen: []}' |
-		selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
-	yt_ensure_window || return 1
-	# Stale state would otherwise satisfy the wait below immediately, and the
-	# banner would report the previous track as if it were this one.
-	selecta_state_write stopped 2>/dev/null || true
-	selecta_yt_advance || selecta_die "$EX_NOTFOUND" "no playable candidate"
-
-	if wait_until_playing 60; then
-		printf '▶ %s\n' "$(selecta_state_read | jq -r '.now.title // "?"')"
-		printf '  in the selecta window · via YouTube · %s searches left today\n' \
-			"$(selecta_yt_quota_left)"
-	else
-		# A dead end should still be useful. The rights holder has blocked
-		# every upload we could find, which no amount of retrying fixes, so
-		# hand over the link and a way to keep listening.
-		printf 'selecta: no playable upload of "%s".\n' "${_yt_query:-that}" >&2
-		printf 'The rights holder has embedding disabled on every version found\n' >&2
-		printf 'after %s searches. This is common for major-label releases.\n' \
-			"$(jq -r '.attempt // 0' "$SELECTA_RUN/yt-queue.json" 2>/dev/null)" >&2
-		_yt_best=$(printf '%s' "$_yt_cands" | jq -r '.[0].videoId // empty')
-		[ -n "$_yt_best" ] &&
-			printf '\nPlay it on YouTube directly:\n  https://youtu.be/%s\n' "$_yt_best" >&2
-		printf '\nOr keep something on:  selecta play <the artist or a mood>\n' >&2
-		exit "$EX_NETWORK"
-	fi
-}
-
-# Internal. The player page posts here through the local server; the shell owns
-# state and segment rendering so the YouTube and radio paths render identically.
-cmd_yt_state() {
-	_ys_in=$(cat)
-	printf '%s' "$_ys_in" | jq -e . >/dev/null 2>&1 || return 0
-	selecta_ensure_dirs || return 0
-
-	_ys_status=$(printf '%s' "$_ys_in" | jq -r '.status // "stopped"')
-	_ys_err=$(printf '%s' "$_ys_in" | jq -r '.error // ""')
-	_ys_code=$(printf '%s' "$_ys_in" | jq -r '.errorCode // ""')
-	selecta_log info "yt-state: $_ys_status${_ys_code:+ code=$_ys_code}${_ys_err:+ ($_ys_err)}"
-	# 'ended' is a normal finish. 'error' is not, and collapsing it into
-	# stopped would hide an unplayable video behind a silent status line.
-	case $_ys_status in
-	ended) _ys_status=stopped ;;
-	esac
-
-	_ys_src=$(printf '%s' "$_ys_in" | jq -c '{
-		id: (.sourceId // ("youtube:" + (.videoId // ""))),
-		kind: "track", provider: "youtube",
-		title: (.title // ""),
-		uri: ("https://www.youtube.com/watch?v=" + (.videoId // "")),
-		attribution_url: ("https://www.youtube.com/watch?v=" + (.videoId // "")),
-		resolver: {type: "youtube", id: (.videoId // "")}
-	}')
-	_ys_now=$(printf '%s' "$_ys_in" | jq -c '{artist: (.artist // ""), title: (.title // "")}')
-	_ys_repo=$(printf '%s' "$_ys_in" | jq -c '.repo // {}')
-	_ys_extra=$(jq -n --argjson repo "$(selecta_json_or "$_ys_repo" '{}')" \
-		--argjson pos "$(selecta_json_or "$(printf '%s' "$_ys_in" | jq '.position // 0')" 0)" \
-		--argjson dur "$(selecta_json_or "$(printf '%s' "$_ys_in" | jq '.duration // 0')" 0)" \
-		'{volume: null, repo: $repo, position: $pos, duration: $dur}')
-
-	# Layer three of the embeddability defence. search.list filters and
-	# videos.list validates, but a video can become unplayable between the two
-	# and embeddability is region-dependent, so the last word belongs to the
-	# player: on 100, 101 or 150 we move to the next candidate rather than
-	# sitting on a dead video.
-	case ${_ys_code:-} in
-	100 | 101 | 150)
-		if selecta_yt_advance; then
-			selecta_log info "yt: skipped $_ys_code, trying next candidate"
-			return 0
-		fi
-		if yt_refill && selecta_yt_advance; then
-			return 0
-		fi
-		selecta_log warn "yt: no embeddable candidate left after retries"
-		;;
-	esac
-
-	selecta_state_write "$_ys_status" "$_ys_src" "$_ys_now" "$_ys_extra"
-
-	if [ "$_ys_status" = playing ]; then
-		_ys_key=$(printf '%s' "$_ys_repo" | jq -r '.key // ""')
-		if [ -n "$_ys_key" ]; then
-			selecta_st_touch_source "$_ys_repo" "$_ys_src" || true
-			selecta_st_record_track \
-				"$(printf '%s' "$_ys_src" | jq -c --argjson r "$_ys_repo" '. + {repo: $r}')" \
-				"$_ys_now" || true
-		fi
-	fi
-	return 0
 }
 
 main() {
@@ -1032,7 +807,6 @@ main() {
 	doctor) cmd_doctor ;;
 	config) cmd_config "$@" ;;
 	resolve) cmd_resolve "$@" ;;
-	__yt-state) cmd_yt_state ;;
 	uninstall) cmd_uninstall "$@" ;;
 	*) unknown_subcommand "$cmd" ;;
 	esac
@@ -1071,17 +845,20 @@ cmd_resolve() {
 		# reads a radio-only result for a named song and concludes there is
 		# nothing to play. It consults YouTube on exactly the same condition.
 		if wants_youtube "$_rs_query" "$_rs_out"; then
-			_rs_yt=$(selecta_yt_resolve "$_rs_query")
-			case $(printf '%s' "$_rs_yt" | jq -r .status) in
-			ok)
-				_rs_out=$_rs_yt
-				;;
-			nokey | quota)
-				_rs_out=$(printf '%s' "$_rs_out" | jq -c \
-					--arg n "$(printf '%s' "$_rs_yt" | jq -r .status)" \
-					'. + {youtube: $n}')
-				;;
-			esac
+			if _rs_yb=$(selecta_yt_bin); then
+				_rs_yt=$("$_rs_yb" __resolve "$_rs_query" 2>/dev/null) || _rs_yt=''
+				case $(printf '%s' "$_rs_yt" | jq -r '.status // ""' 2>/dev/null) in
+				ok) _rs_out=$_rs_yt ;;
+				'') ;;
+				*)
+					_rs_out=$(printf '%s' "$_rs_out" | jq -c \
+						--arg n "$(printf '%s' "$_rs_yt" | jq -r .status)" \
+						'. + {youtube: $n}')
+					;;
+				esac
+			else
+				_rs_out=$(printf '%s' "$_rs_out" | jq -c '. + {youtube: "notinstalled"}')
+			fi
 		fi
 		if [ "$(printf '%s' "$_rs_out" | jq -r .status)" != ok ]; then
 			_rs_hint=$(printf '%s' "$_rs_out" | jq -r '.hint_tags|join(",")')

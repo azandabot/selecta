@@ -197,3 +197,19 @@ selecta_state_read() {
 	fi
 	cat "$SELECTA_STATE"
 }
+
+# Polls until the backend actually reports playback. Both plugins wait on this
+# before claiming a track started.
+wait_until_playing() {
+	_wp_max=${1:-40}
+	_wp_i=0
+	while [ "$_wp_i" -lt "$_wp_max" ]; do
+		case $(selecta_state_read | jq -r '.status // ""') in
+		playing) return 0 ;;
+		error) return 1 ;;
+		esac
+		_wp_i=$((_wp_i + 1))
+		sleep 0.25
+	done
+	return 1
+}
