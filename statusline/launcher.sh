@@ -26,10 +26,19 @@ _wrapped=$SELECTA_HOME/run/wrapped_command
 
 # Wrap mode: the user already had a status line, so theirs prints first and
 # untouched. This is the only branch that forks, and only because it must.
-if [ -s "$_wrapped" ]; then
+#
+# The depth marker is not optional. A wrapped command that resolves back to a
+# selecta launcher re-reads this same wrapped_command and calls itself, and
+# because the child does not inherit SELECTA_HOME it lands on the same file
+# every time. Without the guard that recursion is unbounded and the status
+# line renders nothing at all.
+if [ -s "$_wrapped" ] && [ -z "${SELECTA_SL_NESTED:-}" ]; then
 	IFS= read -r _cmd <"$_wrapped" 2>/dev/null
+	case ${_cmd:-} in
+	*statusline.sh*) _cmd='' ;;
+	esac
 	if [ -n "${_cmd:-}" ]; then
-		printf '%s' "${_ignored:-}" | sh -c "$_cmd" 2>/dev/null || true
+		printf '%s' "${_ignored:-}" | SELECTA_SL_NESTED=1 sh -c "$_cmd" 2>/dev/null || true
 	fi
 fi
 

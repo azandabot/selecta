@@ -125,6 +125,11 @@ human_secs() {
 ensure_player() {
 	selecta_ipc_up && return 0
 	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+	# A crashed supervisor leaves its socket, pidfile and lock behind. Clear
+	# them first or the new one loses the lock to a process that no longer
+	# exists and exits silently.
+	selecta_ipc_reap
+	selecta_lock_reap_stale
 	if [ "$(selecta_engine)" = none ]; then
 		printf 'selecta: no player installed.\n\n  %s\n\nThen run: selecta play\n' \
 			"$(selecta_install_hint 'mpv jq')" >&2
@@ -167,8 +172,40 @@ start_source() {
 		selecta_atomic_write "$SELECTA_RUN/source.json"
 
 	ensure_player
-	selecta_ipc_command "[\"loadfile\",$(printf '%s' "$_ss_first" | jq -R .)]" >/dev/null
-	printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
+	# Clear state before issuing the command. A leftover "playing" from a
+	# previous session satisfies the wait below instantly, and the banner then
+	# reports the old track as though this one had started.
+	selecta_state_write stopped 2>/dev/null || true
+	_ss_reply=$(selecta_ipc_command "[\"loadfile\",$(printf '%s' "$_ss_first" | jq -R .)]")
+	# Never announce playback we have not seen. The banner used to print
+	# unconditionally, so a dead player still looked like success.
+	printf '%s' "$_ss_reply" | grep -q '"error":"success"' ||
+		selecta_die "$EX_NETWORK" "the player did not accept that stream. Run: selecta doctor"
+
+	if wait_until_playing 40; then
+		printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
+	else
+		printf 'selecta: %s was accepted but never started playing.\n' \
+			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
+		printf 'The stream may be down. Try: selecta next\n' >&2
+		exit "$EX_NETWORK"
+	fi
+}
+
+# Blocks until the state file reports playback, bounded. This is the only
+# honest basis for printing a success banner.
+wait_until_playing() {
+	_wp_max=${1:-40}
+	_wp_i=0
+	while [ "$_wp_i" -lt "$_wp_max" ]; do
+		case $(selecta_state_read | jq -r '.status // ""') in
+		playing) return 0 ;;
+		error) return 1 ;;
+		esac
+		_wp_i=$((_wp_i + 1))
+		sleep 0.25
+	done
+	return 1
 }
 
 # --- commands ---------------------------------------------------------------
@@ -523,7 +560,22 @@ cmd_doctor() {
 	selecta_ensure_dirs 2>/dev/null || true
 	printf '\n  home     %s (%s)\n' "$SELECTA_HOME" \
 		"$([ -w "$SELECTA_HOME" ] 2>/dev/null && echo writable || echo "NOT WRITABLE")"
-	printf '  player   %s\n' "$(selecta_ipc_up && echo running || echo "not running")"
+	# Probed, never read from state. A stale state file previously made this
+	# report a running player when nothing was alive.
+	if selecta_ipc_up; then
+		printf '  player   responding\n'
+	elif [ -S "$SELECTA_MPV_SOCK" ]; then
+		printf '  player   DEAD SOCKET (cleared on next play)\n'
+	else
+		printf '  player   not running\n'
+	fi
+	printf '  window   %s\n' "$(selecta_window_up && echo "player page live" || echo "closed")"
+	_cd_state=$(selecta_state_read | jq -r '.status // "stopped"')
+	if [ "$_cd_state" != stopped ] && ! selecta_ipc_up && ! selecta_window_up; then
+		printf '  state    STALE (says %s with nothing running)\n' "$_cd_state"
+	else
+		printf '  state    %s\n' "$_cd_state"
+	fi
 	printf '  status   %s\n' "$(selecta_sl_detect)"
 	printf '  crates   %s\n' \
 		"$(find "$SELECTA_SOUNDTRACKS" -name '*.json' ! -name index.json 2>/dev/null | wc -l | tr -d ' ')"
@@ -646,9 +698,22 @@ yt_start() {
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		'{candidates: $c, repo: $repo}' | selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
 	yt_ensure_window || return 1
+	# Stale state would otherwise satisfy the wait below immediately, and the
+	# banner would report the previous track as if it were this one.
+	selecta_state_write stopped 2>/dev/null || true
 	selecta_yt_advance || selecta_die "$EX_NOTFOUND" "no playable candidate"
-	printf '▶ %s\n' "$(printf '%s' "$_yt_cands" | jq -r '.[0].title')"
-	printf '  playing in the selecta window · via YouTube\n'
+
+	if wait_until_playing 60; then
+		printf '▶ %s\n' "$(selecta_state_read | jq -r '.now.title // "?"')"
+		printf '  in the selecta window · via YouTube · %s searches left today\n' \
+			"$(selecta_yt_quota_left)"
+	else
+		printf 'selecta: queued "%s" but the player never reported back.\n' \
+			"$(printf '%s' "$_yt_cands" | jq -r '.[0].title')" >&2
+		printf 'If you closed the selecta window, run the same command again.\n' >&2
+		printf 'Otherwise: selecta doctor\n' >&2
+		exit "$EX_NETWORK"
+	fi
 }
 
 # Internal. The player page posts here through the local server; the shell owns

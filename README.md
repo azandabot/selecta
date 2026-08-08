@@ -11,10 +11,19 @@
 <!-- demo.gif goes here: /selecta play amapiano → status line lights up → /selecta crate -->
 
 ```
-/selecta play ambient                    # radio, no window
-/selecta play sponono by kabza de small  # YouTube, opens a small player
+/selecta play ambient
+▶ Groove Salad
+                                  ♪ Alex Cortiz — Barista Breaks · Groove Salad · demo-api
+```
 
-                          ♪ Kabza De Small — Sponono · YouTube · demo-api
+Ask for a mood and you get radio: no window, no key, nothing on screen but the
+status line. Ask for a specific track and it opens a small YouTube player:
+
+```
+/selecta play rottweiler by essdeekid
+▶ Rottweiler
+  in the selecta window · via YouTube · 97 searches left today
+                                  ♪ Rap Nation — Rottweiler · YouTube · demo-api
 ```
 
 Selecta runs the set. Every repo gets its own.
@@ -167,6 +176,44 @@ second row. `selecta statusline off` restores everything.
 
 **Nothing is downloaded.** Streams are played, never stored. Radio needs no
 account and no key at all; only YouTube does.
+
+### Setting up the YouTube key
+
+Radio needs nothing. YouTube needs a free key of your own, because an API key
+cannot legally be shipped inside an open source project.
+
+**The order matters.** Enabling the API *before* creating the key is what most
+people get wrong: a key made first will exist but return 403 on every search.
+
+1. Go to <https://console.cloud.google.com> and sign in.
+2. Create a project, or pick one. Top bar, project dropdown, **New project**.
+3. **Enable the API first.** Go to
+   <https://console.cloud.google.com/apis/library/youtube.googleapis.com>,
+   confirm the right project is selected, and press **Enable**. Wait for it to
+   finish.
+4. Only now create the key. **APIs & Services → Credentials → Create
+   credentials → API key**. Copy it.
+5. Optional but sensible: **Edit API key → API restrictions → Restrict key →
+   YouTube Data API v3**. This limits the damage if the key leaks.
+6. Give it to selecta:
+
+```
+/selecta config youtube.api_key YOUR_KEY
+```
+
+Check it took:
+
+```
+/selecta doctor
+  youtube  key set, 100 of 100 searches left today
+```
+
+If doctor says the key is set but searches fail, step 3 was skipped or applied
+to a different project.
+
+**Quota.** 100 searches a day, resetting at midnight Pacific. Each result is
+cached for 7 days, so repeating a request is free, and every play tells you how
+many searches you have left.
 
 ### About the YouTube window
 

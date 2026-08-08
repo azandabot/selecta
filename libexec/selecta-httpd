@@ -27,6 +27,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -41,6 +42,10 @@ PAGE = (ROOT / "player" / "index.html").read_text(encoding="utf-8")
 _lock = threading.Lock()
 _queue = []
 _seq = 0
+# Last time the page polled. The page polls /cmd continuously, so this doubles
+# as a liveness signal: if the user closes the window the polls stop, and the
+# shell can tell the difference between "player is up" and "window is gone".
+_last_seen = 0.0
 
 
 def _write(path: Path, text: str) -> None:
@@ -91,7 +96,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(parsed.query)
 
         if parsed.path == "/health":
-            return self._send(200, b'{"ok":true}')
+            with _lock:
+                seen = _last_seen
+            age = (time.monotonic() - seen) if seen else None
+            body = {"ok": True, "page_age": age}
+            return self._send(200, json.dumps(body).encode())
 
         if parsed.path == "/":
             page = PAGE.replace("__TOKEN__", TOKEN).replace("__ORIGIN__", self._origin())
@@ -100,6 +109,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/cmd":
             if not self._authed(params):
                 return self._send(403, b'{"error":"forbidden"}')
+            global _last_seen
+            with _lock:
+                _last_seen = time.monotonic()
             _drain_commands()
             with _lock:
                 cmd = _queue.pop(0) if _queue else None

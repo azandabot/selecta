@@ -61,11 +61,24 @@ selecta_sl_detect() {
 	# Compared against the resolved script path rather than a hardcoded
 	# substring: with SELECTA_HOME overridden, a substring test would fail to
 	# recognise our own entry and we would end up wrapping ourselves.
+	#
+	# Any selecta launcher counts as ours, not just this SELECTA_HOME's. A
+	# scratch or demo home installs a launcher at a different path, and
+	# treating that as a stranger's status line wraps selecta around selecta,
+	# which recurses until the status line produces nothing.
 	if [ -z "$_sd_cmd" ]; then
 		printf 'absent'
 	elif [ "$_sd_cmd" = "$SELECTA_SL_SCRIPT" ]; then
 		printf 'ours'
 	else
+		case $_sd_cmd in
+		*statusline.sh*)
+			if [ -f "${_sd_cmd%% *}" ] && grep -q 'selecta status line' "${_sd_cmd%% *}" 2>/dev/null; then
+				printf 'ours-elsewhere'
+				return 0
+			fi
+			;;
+		esac
 		printf 'foreign'
 	fi
 }
@@ -135,6 +148,12 @@ selecta_sl_install() {
 	selecta_sl_install_script || return "$EX_UNWRITABLE"
 
 	_si_mode=own
+	# ours-elsewhere is replaced outright rather than wrapped: wrapping one
+	# selecta launcher in another is the recursion described above.
+	if [ "$_si_state" = ours-elsewhere ]; then
+		rm -f "$SELECTA_RUN/wrapped_command" 2>/dev/null
+		selecta_cfg_set '.statusline.wrapped' 'null'
+	fi
 	if [ "$_si_state" = foreign ]; then
 		# Preserve their command verbatim so the launcher can run it first and
 		# `statusline off` can put it back exactly as it was.

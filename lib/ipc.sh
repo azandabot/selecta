@@ -11,7 +11,25 @@
 #   reply    {"error":"success","data":null,"request_id":0}
 #   event    {"event":"file-loaded"}
 
-selecta_ipc_up() { [ -S "$SELECTA_MPV_SOCK" ]; }
+# A socket file outliving its process is the normal case after a crash, so
+# existence proves nothing. Everything downstream trusted this, which is how
+# `play` came to report success with no player running at all: the stale socket
+# made the launcher skip starting mpv, and then nothing consumed the command.
+selecta_ipc_up() {
+	[ -S "$SELECTA_MPV_SOCK" ] || return 1
+	printf '{"command":["get_property","mpv-version"]}\n' |
+		nc -U "$SELECTA_MPV_SOCK" 2>/dev/null | head -1 | grep -q '"error":"success"'
+}
+
+# Clears a socket whose process is gone, so the next start is not blocked by
+# the corpse of the last one.
+selecta_ipc_reap() {
+	[ -S "$SELECTA_MPV_SOCK" ] || return 0
+	selecta_ipc_up && return 0
+	selecta_log warn "clearing dead mpv socket"
+	rm -f "$SELECTA_MPV_SOCK" 2>/dev/null
+	return 0
+}
 
 # One request, one reply. nc exits when mpv closes its side or the read times
 # out, so a wedged player degrades to a failed command rather than a hang.

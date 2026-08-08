@@ -89,11 +89,19 @@ selecta_window_open() {
 	return "$EX_MISSING_DEP"
 }
 
+# Liveness is measured by whether the page is still polling, not by whether a
+# browser process exists. Closing the window leaves the browser running with
+# other tabs, so a pid check reports a player that is gone and the next play
+# queues a command nobody will ever read.
 selecta_window_up() {
-	[ -s "$SELECTA_RUN/window.pid" ] || return 1
-	IFS= read -r _wu <"$SELECTA_RUN/window.pid" 2>/dev/null
-	case ${_wu:-} in '' | *[!0-9]*) return 1 ;; esac
-	kill -0 "$_wu" 2>/dev/null
+	[ -s "$SELECTA_RUN/httpd.json" ] || return 1
+	_wu_o=$(jq -r '.origin // empty' "$SELECTA_RUN/httpd.json" 2>/dev/null)
+	[ -n "$_wu_o" ] || return 1
+	_wu_age=$(curl -sf --max-time 2 "$_wu_o/health" 2>/dev/null |
+		jq -r '.page_age // empty' 2>/dev/null)
+	[ -n "$_wu_age" ] || return 1
+	# Page polls roughly every second; five seconds of silence means gone.
+	awk -v a="$_wu_age" 'BEGIN { exit !(a < 5) }'
 }
 
 yt_ensure_window() {
@@ -114,6 +122,15 @@ yt_ensure_window() {
 		printf 'Open this yourself and leave it visible:\n  %s\n' "$_yw_url" >&2
 		return 1
 	}
-	printf '%s\n' "$!" | selecta_atomic_write "$SELECTA_RUN/window.pid" 2>/dev/null || true
-	return 0
+	# Wait for the page to start polling before returning, so the caller does
+	# not queue a command into a window that has not loaded yet.
+	_yw_i=0
+	while [ "$_yw_i" -lt 100 ]; do
+		selecta_window_up && return 0
+		_yw_i=$((_yw_i + 1))
+		sleep 0.1
+	done
+	printf 'selecta: the player window did not come up.\n' >&2
+	printf 'Open this and leave it visible:\n  %s\n' "$_yw_url" >&2
+	return 1
 }
