@@ -94,6 +94,17 @@ jq -n --arg k "$KEY" --arg f "$(basename "$FILE")" --arg u "$(iso 0)" \
 	'{($k): {file:$f, display_name:"demo-api", updated_at:$u, seconds:48210}}' \
 	>"$SELECTA_HOME/soundtracks/index.json"
 
+# Borrow the real YouTube key if one is configured, so the demo's YouTube step
+# actually plays. Nothing else is copied out of the real home.
+_realcfg=$HOME/.claude/selecta/config.json
+if [ -s "$_realcfg" ]; then
+	_k=$(jq -r '.youtube.api_key // ""' "$_realcfg" 2>/dev/null)
+	if [ -n "$_k" ]; then
+		jq -n --arg k "$_k" '{youtube: {api_key: $k}}' >"$SELECTA_HOME/config.json"
+		printf 'Borrowed your YouTube key so the demo can play a named track.\n'
+	fi
+fi
+
 printf '%s' "$REPO" >/tmp/selecta-demo-path
 
 cat <<EOF

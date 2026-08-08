@@ -27,14 +27,13 @@ selecta_segment_lines() {
 	_sg_state=$1
 
 	_sg_status=$(printf '%s' "$_sg_state" | jq -r '.status // "stopped"')
-	_sg_artist=$(printf '%s' "$_sg_state" | jq -r '.now.artist // ""')
-	_sg_title=$(printf '%s' "$_sg_state" | jq -r '.now.title // ""')
-	_sg_station=$(printf '%s' "$_sg_state" | jq -r '.source.title // ""')
-	_sg_repo=$(printf '%s' "$_sg_state" | jq -r '.repo.display_name // ""')
-
-	case $_sg_status in
-	stopped | '') return 1 ;;
-	esac
+	# Falls back to .last when stopped: the whole point of the line is to say
+	# what is or was playing, and blanking it the moment a track ends is the
+	# same as not having it.
+	_sg_artist=$(printf '%s' "$_sg_state" | jq -r '.now.artist // .last.artist // ""')
+	_sg_title=$(printf '%s' "$_sg_state" | jq -r '.now.title // .last.title // ""')
+	_sg_station=$(printf '%s' "$_sg_state" | jq -r '.source.title // .last.source // ""')
+	_sg_repo=$(printf '%s' "$_sg_state" | jq -r '.repo.display_name // .last.repo // ""')
 
 	if [ -n "$_sg_artist" ] && [ -n "$_sg_title" ]; then
 		_sg_track="$_sg_artist — $_sg_title"
@@ -49,8 +48,23 @@ selecta_segment_lines() {
 	paused) _sg_glyph='❚❚' ;;
 	buffering) _sg_glyph='♪·' ;;
 	error) _sg_glyph='♪!' ;;
+	stopped | '') _sg_glyph='■' ;;
 	*) _sg_glyph='♪' ;;
 	esac
+
+	# Nothing has ever played, so offer the command rather than an empty bar.
+	if [ -z "$_sg_artist" ] && [ -z "$_sg_title" ] && [ -z "$_sg_station" ]; then
+		_sg_idle='♪ /selecta play'
+		printf '%s\t%s\t%s\n' "$_sg_idle" "$_sg_idle" "$_sg_idle"
+		return 0
+	fi
+
+	# Remaining search budget, on the widest variant only. This is the number
+	# people actually need and it has nowhere else persistent to live.
+	_sg_left=''
+	if selecta_yt_have_key 2>/dev/null; then
+		_sg_left=" · $(selecta_yt_quota_left) left"
+	fi
 
 	_sg_n="$_sg_glyph $_sg_track"
 	_sg_m=$_sg_n
@@ -58,6 +72,7 @@ selecta_segment_lines() {
 		_sg_m="$_sg_n · $_sg_station"
 	_sg_w=$_sg_m
 	[ -n "$_sg_repo" ] && _sg_w="$_sg_m · $_sg_repo"
+	_sg_w="$_sg_w$_sg_left"
 
 	printf '%s\t%s\t%s\n' \
 		"$(selecta_ellipsize "$_sg_n" "$SELECTA_W_NARROW")" \
@@ -77,10 +92,7 @@ selecta_segment_lines() {
 # per state change, instead of on every status line refresh.
 selecta_segment_write() {
 	_sw_state=$1
-	_sw_plain=$(selecta_segment_lines "$_sw_state") || {
-		: >"$SELECTA_SEGMENT" 2>/dev/null || true
-		return 0
-	}
+	_sw_plain=$(selecta_segment_lines "$_sw_state") || return 0
 	_sw_status=$(printf '%s' "$_sw_state" | jq -r '.status // "stopped"')
 
 	_sw_dim=$(printf '\033[2m')
@@ -115,6 +127,10 @@ selecta_state_write() {
 	_st_now=${3:-null}
 	_st_extra=${4:-'{}'}
 
+	_st_prev='{}'
+	[ -s "$SELECTA_STATE" ] && jq -e . "$SELECTA_STATE" >/dev/null 2>&1 &&
+		_st_prev=$(cat "$SELECTA_STATE")
+
 	_st_doc=$(jq -n \
 		--arg schema 1 \
 		--arg status "$_st_status" \
@@ -122,8 +138,16 @@ selecta_state_write() {
 		--argjson source "$_st_source" \
 		--argjson now "$_st_now" \
 		--argjson extra "$_st_extra" \
+		--argjson prev "$_st_prev" \
 		'{schema: 1, status: $status, updated_at: $updated,
-		  source: $source, now: $now} * $extra') || return 1
+		  source: $source, now: $now}
+		 * $extra
+		 * { last: (
+			 if ($now.title // "") != "" then
+			   { artist: ($now.artist // ""), title: $now.title,
+				 source: ($source.title // ""),
+				 repo: ($extra.repo.display_name // "") }
+			 else ($prev.last // null) end ) }') || return 1
 
 	printf '%s\n' "$_st_doc" | selecta_atomic_write "$SELECTA_STATE" || return 1
 	selecta_segment_write "$_st_doc"
