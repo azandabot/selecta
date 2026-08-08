@@ -73,6 +73,40 @@ t_eq "every path the README points at exists" "" "$(
 	done
 )"
 
+# --- images ------------------------------------------------------------------
+# GitHub's markdown sanitiser drops `style`, so an inline width does nothing
+# and the image renders at its natural size. It fails silently, which is how a
+# 1614px logo shipped. width= and align= survive; style= never does.
+t_eq "no inline style attributes in the README" "" \
+	"$(grep -n 'style=' "$README" || true)"
+
+# Absolute raw URLs are used so aggregator and marketplace UIs can render this
+# README outside the repo, which means a moved file breaks a page nobody here
+# will look at. Check the path resolves against the tree.
+t_eq "every raw.githubusercontent asset exists in the repo" "" "$(
+	grep -o 'https://raw\.githubusercontent\.com/[^)" ]*' "$README" | sort -u |
+		while read -r u; do
+			_rel=${u#https://raw.githubusercontent.com/}
+			_rel=${_rel#*/}
+			_rel=${_rel#*/}
+			_rel=${_rel#*/}
+			[ -e "$REPO/$_rel" ] || printf '%s\n' "$u"
+		done
+)"
+t_eq "every local image the README points at exists" "" "$(
+	grep -oE 'src="(assets|docs|demo)/[A-Za-z0-9_./-]+"' "$README" |
+		sed 's/^src="//; s/"$//' | sort -u | while read -r p; do
+		[ -e "$REPO/$p" ] || printf '%s\n' "$p"
+	done
+)"
+# A README header image is downloaded by everyone who opens the page.
+t_eq "no README image is oversized" "" "$(
+	find "$REPO/assets" -type f 2>/dev/null | while read -r f; do
+		_kb=$(($(wc -c <"$f") / 1024))
+		[ "$_kb" -le 600 ] || printf '%s is %sKB\n' "${f##*/}" "$_kb"
+	done
+)"
+
 # --- the headline claim ---------------------------------------------------------
 # "No key, no config, no dependencies, nothing to run." The launcher is what
 # makes that true or false, and it is one grep away from becoming false.

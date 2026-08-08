@@ -1,5 +1,7 @@
-<img src="selecta-logo.png" style="width: 350px; margin: 0 auto -50px auto;display: flex;"/>
-<h1 align="center">selecta</h1>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/azandabot/selecta/main/assets/selecta-logo.png" alt="selecta" width="340">
+</p>
+
 <p align="center"><em>What you're playing, in your Claude Code status line.<br>Whatever you're playing it with.</em></p>
 
 <p align="center">
