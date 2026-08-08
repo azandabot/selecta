@@ -82,6 +82,24 @@ t_eq "doctor with no jq does not leak a shell error" "0" \
 	"$(grep -c 'command not found' /tmp/selecta-cli-djq.err || true)"
 rm -f /tmp/selecta-cli-djq.err
 
+# mpv is required for radio, not for selecta. doctor used to print
+# "MISSING no player" and exit 4 on a machine where the status line worked
+# perfectly, which contradicts the one claim the README leads with.
+NOMPV=$(t_path_without mpv)
+_dm_out=$(PATH=$NOMPV "$S" doctor </dev/null 2>&1)
+_dm_code=$(
+	PATH=$NOMPV "$S" doctor </dev/null >/dev/null 2>&1
+	echo $?
+)
+t_eq "doctor with no mpv exits 0" "0" "$_dm_code"
+t_eq "doctor with no mpv says radio cannot play" "1" 	"$(printf '%s' "$_dm_out" | grep -c 'radio cannot play')"
+t_eq "doctor with no mpv says other players still work" "1" 	"$(printf '%s' "$_dm_out" | grep -c 'does not need it')"
+t_eq "doctor with no mpv does not call it MISSING" "0" 	"$(printf '%s' "$_dm_out" | grep -c 'MISSING  no player')"
+# The hint listed everything selecta might ever want, including what was
+# already installed.
+t_eq "the install hint names only what is absent" "0" 	"$(printf '%s' "$_dm_out" | grep -c 'install.* jq')"
+
+
 t_eq "other commands with no jq exit 4" "4" "$(
 	PATH=$NOJQ "$S" play ambient </dev/null >/dev/null 2>&1
 	echo $?

@@ -664,16 +664,19 @@ cmd_doctor() {
 	done
 
 	_cd_engine=$(selecta_engine)
+	_cd_want=''
 	case $_cd_engine in
 	mpv) printf '  ok       mpv (%s)\n' "$(mpv --version 2>/dev/null | head -1 | cut -d' ' -f2)" ;;
 	none)
-		printf '  MISSING  no player\n'
-		_cd_fail=1
+		printf '  absent   mpv, so radio cannot play. Reading Spotify, Apple\n'
+		printf '           Music or an MPRIS player does not need it.\n'
+		_cd_want=mpv
 		;;
 	esac
 
-	if [ "$_cd_fail" -eq 1 ]; then
-		printf '\nInstall what is missing:\n\n  %s\n\n' "$(selecta_install_hint 'mpv jq')"
+	selecta_have jq || _cd_want="${_cd_want:+$_cd_want }jq"
+	if [ -n "$_cd_want" ]; then
+		printf '\nTo install:\n\n  %s\n\n' "$(selecta_install_hint "$_cd_want")"
 		printf 'selecta will not run that for you. Copy it if it looks right.\n'
 	fi
 

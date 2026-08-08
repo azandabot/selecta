@@ -57,6 +57,10 @@ Two things need action:
   code is now read, and `selecta-youtube doctor` probes the API rather than
   reporting the contents of a config file.
 - `doctor` died on its own `jq` call after reporting that `jq` was missing.
+- `doctor` reported `MISSING no player` and exited 4 when mpv was absent, on
+  machines where the status line worked perfectly. mpv is required for radio,
+  not for selecta. It is now reported as absent with the consequence named, the
+  exit stays 0, and the install hint lists only what is actually missing.
 - `nc -U` was an unchecked hard dependency. The transport now resolves through
   `nc` → `ncat` → `socat` → `python3` and is reported by doctor.
 - `privacy.record_commits: false` was ignored, because the config reader used
