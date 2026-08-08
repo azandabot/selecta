@@ -23,7 +23,7 @@ mkdir -p "$SELECTA_HOME/run"
 # shellcheck source=lib/state.sh
 . "$SELECTA_ROOT/lib/state.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 if ! command -v mpv >/dev/null 2>&1; then
 	printf 'ok playback suite skipped, no mpv\n' >>"$T_RESULTS"

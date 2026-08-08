@@ -13,7 +13,7 @@ mkdir -p "$SELECTA_HOME/run"
 # shellcheck source=lib/statusline.sh
 . "$SELECTA_ROOT/lib/statusline.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 FIX=$SELECTA_HOME/fixtures
 mkdir -p "$FIX"

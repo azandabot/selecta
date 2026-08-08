@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "selecta",
-      "source": "./",
+      "source": "./plugins/selecta",
       "description": "Background music for your coding sessions, in the terminal. Every repository builds its own soundtrack.",
       "category": "creative-media",
       "tags": ["music", "radio", "statusline", "focus"]

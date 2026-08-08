@@ -17,7 +17,7 @@ mkdir -p "$SELECTA_HOME/cache"
 # shellcheck source=lib/resolve-net.sh
 . "$SELECTA_ROOT/lib/resolve-net.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 # One retry. radio-browser currently resolves to a single host and intermittently
 # returns an empty body; a transient blip should not open an issue.

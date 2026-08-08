@@ -17,7 +17,7 @@ mkdir -p "$SELECTA_HOME/cache"
 # shellcheck source=lib/route.sh
 . "$SELECTA_ROOT/lib/route.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 route() {
 	_r=$(selecta_resolve "$1")

@@ -20,7 +20,7 @@ mkdir -p "$SELECTA_HOME/run"
 # shellcheck source=lib/nowplaying.sh
 . "$SELECTA_ROOT/lib/nowplaying.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 STUB=$SELECTA_HOME/stub
 mkdir -p "$STUB"

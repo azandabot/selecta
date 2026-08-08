@@ -12,7 +12,7 @@
 # are untouched.
 set -eu
 
-ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(cd -- "$(dirname -- "$0")/../plugins/selecta" && pwd -P)
 DEMO=${SELECTA_DEMO_DIR:-${TMPDIR:-/tmp}/selecta-demo}
 SELECTA_HOME="$DEMO/home"
 export SELECTA_HOME

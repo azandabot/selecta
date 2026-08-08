@@ -9,7 +9,7 @@ rm -rf "$SELECTA_HOME"
 mkdir -p "$SELECTA_HOME/run"
 
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 L=$SELECTA_ROOT/statusline/launcher.sh
 SEG=$SELECTA_HOME/run/segment

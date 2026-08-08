@@ -7,7 +7,7 @@ set -u
 # shellcheck source=lib/repo.sh
 . "$SELECTA_ROOT/lib/repo.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 EXPECT=github.com/azandabot/selecta
 

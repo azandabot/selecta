@@ -1,2 +1,7 @@
 # local(1) is not in POSIX but every real /bin/sh (dash, bash, ash, ksh) implements it.
 disable=SC3043
+
+# Payload lives under plugins/; `# shellcheck source=lib/...` resolves from there.
+source-path=plugins/selecta
+# tests/ stays at the repo root, outside either payload.
+source-path=.

@@ -15,7 +15,7 @@ mkdir -p "$SELECTA_HOME/soundtracks" "$SELECTA_HOME/run"
 # shellcheck source=lib/soundtrack.sh
 . "$SELECTA_ROOT/lib/soundtrack.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 KEY="remote:github.com/x/y"
 REPO='{"key":"remote:github.com/x/y","display_name":"y","scope":"remote","branch":"main","commit":"abc1234","aliases":[]}'

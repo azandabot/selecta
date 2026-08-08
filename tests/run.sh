@@ -7,8 +7,10 @@
 set -eu
 
 TESTS_DIR=$(cd -- "$(dirname -- "$0")" && pwd -P)
-SELECTA_ROOT=$(cd -- "$TESTS_DIR/.." && pwd -P)
+SELECTA_ROOT=$(cd -- "$TESTS_DIR/../plugins/selecta" && pwd -P)
 export SELECTA_ROOT
+SELECTA_TESTS=$TESTS_DIR
+export SELECTA_TESTS
 
 TARGET=${1:-all}
 FILTER=${2:-}

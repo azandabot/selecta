@@ -18,7 +18,7 @@ mkdir -p "$SELECTA_HOME/run"
 # shellcheck source=lib/statusline.sh
 . "$SELECTA_ROOT/lib/statusline.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 # --- a socket file is not a live player -------------------------------------
 # The original selecta_ipc_up was `[ -S socket ]`. A crashed mpv leaves its

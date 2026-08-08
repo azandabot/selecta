@@ -11,7 +11,7 @@ mkdir -p "$SELECTA_HOME/run"
 # shellcheck source=lib/common.sh
 . "$SELECTA_ROOT/lib/common.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 TD=$SELECTA_ROOT/libexec/selecta-teardown
 SUP=$SELECTA_ROOT/libexec/selecta-supervisor

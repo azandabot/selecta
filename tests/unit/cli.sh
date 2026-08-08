@@ -14,7 +14,7 @@ rm -rf "$SELECTA_HOME"
 mkdir -p "$SELECTA_HOME/run" "$SELECTA_HOME/cache"
 
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 S=$SELECTA_ROOT/bin/selecta
 FIX=$SELECTA_HOME/settings.json

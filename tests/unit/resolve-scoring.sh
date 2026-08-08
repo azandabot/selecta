@@ -17,7 +17,7 @@ mkdir -p "$SELECTA_HOME/cache"
 # shellcheck source=lib/resolve.sh
 . "$SELECTA_ROOT/lib/resolve.sh"
 # shellcheck source=tests/lib.sh
-. "$SELECTA_ROOT/tests/lib.sh"
+. "$SELECTA_TESTS/lib.sh"
 
 r() { selecta_resolve "$1"; }
 field() { printf '%s' "$1" | jq -r "$2"; }
