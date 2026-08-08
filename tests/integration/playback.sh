@@ -86,11 +86,23 @@ if selecta_ipc_up; then
 	t_eq "unpause returns to playing" "true" \
 		"$(wait_for '[ "$(jq -r .status "$SELECTA_STATE" 2>/dev/null)" = playing ]' 40 && echo true || echo false)"
 
-	# Stopped must keep the last track rather than blanking the bar.
+	# A stop holds the last line briefly, so a station change does not blank
+	# the bar and bring it back a second later.
 	selecta_ipc_command '["stop"]' >/dev/null
 	wait_for '[ "$(jq -r .status "$SELECTA_STATE" 2>/dev/null)" = stopped ]' 40
 	t_eq "the segment survives a stop" "true" \
 		"$([ -s "$SELECTA_SEGMENT" ] && echo true || echo false)"
+
+	# Past the grace it clears. Holding it forever is what "stuck on a track
+	# from an hour ago" looked like.
+	printf '%s\n' "$(($(date +%s) - 3600))" >/dev/null
+	touch -t "$(date -u -r $(($(date +%s) - 3600)) +%Y%m%d%H%M.%S 2>/dev/null ||
+		date -u -d @$(($(date +%s) - 3600)) +%Y%m%d%H%M.%S)" \
+		"$SELECTA_RUN/idle-since" 2>/dev/null
+	t_eq "an idle bar clears itself" "true" \
+		"$(wait_for '[ ! -s "$SELECTA_SEGMENT" ]' 40 && echo true || echo false)"
+	t_eq "and the launcher then prints nothing" "" \
+		"$(COLUMNS=100 sh "$SELECTA_ROOT/statusline/launcher.sh" </dev/null)"
 fi
 
 # --- teardown -----------------------------------------------------------------

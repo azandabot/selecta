@@ -58,6 +58,10 @@ Two things need action:
   the machine slowed down. Windows are now closed before a replacement opens,
   by `selecta stop`, and at session end. Matched on the dedicated profile
   directory, so it can never reach the user's own browser.
+- **The status line held the last track forever.** Nothing playing left the
+  bar naming something that stopped an hour ago, which is what "stuck" looked
+  like. The line is now held only long enough to absorb a station change, then
+  cleared, which is what the README always claimed happened.
 - **The status line named the wrong player during YouTube playback.** The probe
   knew about mpv and nothing else, so it fell through to whatever music app was
   open while selecta was the one making noise.

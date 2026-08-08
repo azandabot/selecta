@@ -233,11 +233,15 @@ sup_tick() {
 		_t_path=$(selecta_ipc_get path 2>/dev/null)
 		if [ -z "$_t_path" ] || [ "$_t_path" = null ]; then
 			sup_refresh stopped
+			sup_idle_segment
 		elif [ "$_t_paused" = true ]; then
+			sup_playing_now
 			sup_refresh paused
 		elif [ "$_t_idle" = true ]; then
+			sup_playing_now
 			sup_refresh buffering
 		else
+			sup_playing_now
 			sup_refresh playing
 		fi
 		return 0
@@ -262,15 +266,37 @@ sup_write_foreign() {
 	_wf_ti=$(printf '%s' "$1" | cut -f3)
 	_wf_sr=$(printf '%s' "$1" | cut -f4)
 	_wf_plain=$(selecta_segment_lines_plain "$_wf_st" "$_wf_ar" "$_wf_ti" "$_wf_sr" "") || return 0
+	sup_playing_now
 	selecta_segment_render "$_wf_plain" "$_wf_st"
 }
 
-# Nothing anywhere. Keep the last line rather than blanking the bar.
+# Nothing anywhere.
+#
+# The last line is held briefly, because a station change or a buffering gap
+# would otherwise blank the bar and bring it back a second later. Past that
+# the bar clears: a status line naming a track that stopped an hour ago is
+# worse than an empty one, and it is what "stuck" looks like to a user.
+SELECTA_IDLE_CLEAR=${SELECTA_IDLE_CLEAR:-60}
+
 sup_idle_segment() {
-	[ -s "$SELECTA_SEGMENT" ] && return 0
-	_is_plain=$(selecta_segment_lines_plain stopped "" "" "" "") || return 0
-	selecta_segment_render "$_is_plain" stopped
+	_is_mark=$SELECTA_RUN/idle-since
+	[ -f "$_is_mark" ] || : >"$_is_mark"
+
+	if [ ! -s "$SELECTA_SEGMENT" ]; then
+		_is_plain=$(selecta_segment_lines_plain stopped "" "" "" "") || return 0
+		selecta_segment_render "$_is_plain" stopped
+		return 0
+	fi
+
+	_is_age=$(($(date +%s) - $(selecta_file_mtime "$_is_mark")))
+	[ "$_is_age" -lt "$SELECTA_IDLE_CLEAR" ] && return 0
+	# Empty, not deleted: the launcher treats an empty segment as "print
+	# nothing" and never has to distinguish that from a missing file.
+	: >"$SELECTA_SEGMENT"
 }
+
+# Anything actually playing means the idle clock has not started.
+sup_playing_now() { rm -f "$SELECTA_RUN/idle-since" 2>/dev/null || true; }
 
 if [ "$MODE" = once ]; then
 	sup_tick
