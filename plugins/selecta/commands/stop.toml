@@ -1,0 +1,9 @@
+description = "Stop whatever selecta is playing"
+
+prompt = """
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta stop
+```
+
+Report what it prints. "Nothing playing." is a normal result, not a failure.
+"""

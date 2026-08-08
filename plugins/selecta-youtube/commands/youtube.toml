@@ -1,0 +1,18 @@
+description = "Play one specific named track through YouTube (opens a small visible window)"
+argument-hint = "<artist - title>"
+
+prompt = """
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta-youtube play $ARGUMENTS
+```
+
+This opens a visible browser window, which YouTube's Developer Policies require
+and which cannot be disabled. Only run it for a specific named recording; for a
+mood or genre use `/selecta:selecta play` instead, which uses radio and opens no
+window.
+
+If it reports the API is not enabled, relay the URL it prints. Do not create
+Google Cloud projects or API keys on the user's behalf. If every upload is
+embed-locked it prints a direct YouTube link; relay the link and do not suggest
+a downloader or any other way around the restriction.
+"""

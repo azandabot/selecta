@@ -1,0 +1,14 @@
+description = "What this repository sounds like: its stations, its time, its tracks by commit"
+argument-hint = "[--history [n]] [--path]"
+
+prompt = """
+Run this in the user's current directory and relay the output unmodified:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta crate $ARGUMENTS
+```
+
+It is a read-only report. Do not re-rank it, summarise the bars into prose, or
+convert the durations. If the crate is empty, relay that line as-is; do not
+offer to fill it by playing something unless the user asks.
+"""

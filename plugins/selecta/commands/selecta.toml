@@ -1,0 +1,15 @@
+description = "Play or control background music: play <mood>, pause, go, next, stop, vol <n>"
+argument-hint = "play <mood> | pause | go | next | stop | vol <n> | stations"
+
+prompt = """
+Run the selecta CLI with the arguments the user gave, and report what it prints.
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta $ARGUMENTS
+```
+
+With no arguments this reports what is playing and starts nothing.
+
+Never construct a stream URL or station id yourself. If the resolver returns
+nothing, say so and offer `selecta stations` rather than guessing.
+"""

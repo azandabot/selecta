@@ -73,7 +73,10 @@ selecta config youtube.api_key YOUR_KEY
 Free, roughly five clicks: console.cloud.google.com → new project → enable
 "YouTube Data API v3" → Credentials → Create credentials → API key.
 
-`selecta doctor` reports whether a key is set and how much quota is left.
+`selecta-youtube doctor` probes the API and reports whether the key works,
+whether the API is enabled on the project, and how much quota is left. It
+asks Google rather than reading the config file, because a key that 403s on
+every request looks identical to a working one on disk.
 
 ### Quota
 
@@ -84,7 +87,8 @@ validation is effectively free and **search is the scarce resource**.
 selecta caches every resolved query for 7 days, well inside YouTube's 30-day
 limit on storing API data, so repeating a request costs nothing.
 
-When the bucket runs out, selecta says so and falls back to radio. The quota
+When the bucket runs out, selecta-youtube says so and points at the crate,
+where replays cost nothing. The quota
 resets at midnight Pacific.
 
 ## What the user sees
@@ -106,8 +110,27 @@ from radio: many stations send only a station name.
 | `no key` | none configured | Show the setup steps. Radio still works. |
 | `quota` | 100 searches used today | Resets midnight Pacific. Radio still works. |
 | every candidate skipped | all unembeddable | Offer radio, or a different search phrasing. |
-| window did not open | no browser, or python3 missing | `selecta doctor` prints which. |
+| window did not open | no browser, or python3 missing | `selecta-youtube doctor` prints which. |
 | "browser blocked autoplay" | Chrome autoplay policy | The user presses play once in the window. |
 
 The player server binds to 127.0.0.1 on an ephemeral port with a per-session
 token, so nothing else on the machine can drive it.
+
+## 403 is not "no results"
+
+The single most common setup mistake is creating an API key without enabling
+YouTube Data API v3 on the project. Google answers every request with 403
+`accessNotConfigured`, which for two releases was indistinguishable from a
+search that simply matched nothing: selecta played radio instead and doctor
+reported "key set".
+
+The reason code is now read and each case gets its own answer:
+
+| Reason | Status | What the user has to do |
+|---|---|---|
+| `accessNotConfigured` | `notenabled` | Enable the API on the project |
+| `quotaExceeded` | `quota` | Wait for midnight Pacific, or replay from the crate |
+| `keyInvalid`, `badRequest` | `badkey` | Check the key for a stray space |
+| anything else | `none` | Genuinely no result |
+
+Never tell a user "no results" without checking which of these it was.

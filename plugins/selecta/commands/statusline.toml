@@ -1,0 +1,22 @@
+description = "Show what is playing in the Claude Code status line (asks before editing settings)"
+argument-hint = "on | off | status"
+
+prompt = """
+This edits the user's global ~/.claude/settings.json, so it is a strict two-step.
+
+Step one, with no flag:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta statusline $ARGUMENTS
+```
+
+Exit code 7 is the expected, correct result for `on`. It means nothing was
+written. Show the user the output verbatim, ask whether to apply it, then STOP
+and wait for their answer in a new turn.
+
+Only after they say yes, run the same command with `--user-confirmed` appended.
+
+Never edit settings.json with Write, Edit, jq, sed or a redirect. Exit 3 means
+selecta refused because the file cannot be round-tripped safely; relay the paste
+block it printed.
+"""

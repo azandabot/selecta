@@ -1,22 +1,17 @@
 ---
 name: selecta
-description: Plays background music in the terminal during a coding session and gives every git repository its own accumulating soundtrack. Use when the user explicitly asks to play, pause, skip, stop or change music, asks what is playing, asks what a repository sounds like, or asks to see their listening history. Handles requests phrased as a mood, genre, artist or vibe, including ones with no obvious station such as "something with a log drum" or "aura farming music". Never start music unless the user asked for music.
-argument-hint: "play <mood> | resume | next | stop | vol <n> | crate | history | stations | doctor"
-disable-model-invocation: true
+description: Plays and controls background music from internet radio, and shows what is playing in the status line. Use when the user asks in their own words to put music on, play a mood or genre ("play something calm", "amapiano", "lo-fi for focus"), or to pause, unpause, skip, stop or change the volume of music. Also use when they ask what is currently playing. Do NOT use to install the status line (that is selecta-statusline), to report what a repository has been listening to (that is selecta-crate), to diagnose a failure (that is selecta-doctor), or to play one specific named song (that is selecta-youtube). This skill starts audio, so only run it when the user actually asked for music.
+argument-hint: "play <mood> | pause | go | next | stop | vol <n> | stations"
 license: MIT
-compatibility: Requires mpv and jq, plus network access. macOS and Linux.
-hooks:
-  SessionEnd:
-    - hooks:
-        - type: command
-          command: "\"${CLAUDE_PLUGIN_ROOT}\"/libexec/selecta-teardown"
-          timeout: 1
+compatibility: Radio playback needs mpv and jq. Reading Spotify, Apple Music or an MPRIS player needs neither. macOS and Linux.
 ---
 
 # selecta
 
-Background music from internet radio and Creative Commons catalogues, controlled
-from the terminal, with each repository accumulating its own soundtrack.
+**This skill starts audio.** Run it only when the user asked for music in their
+own words. Setting up an environment, starting a long task, or the user saying
+"I'm about to focus for two hours" or "this refactor is going to be boring" are
+**not** requests for music. Say nothing about music in those cases.
 
 Everything runs through one executable:
 
@@ -24,152 +19,115 @@ Everything runs through one executable:
 "${CLAUDE_PLUGIN_ROOT}"/bin/selecta <subcommand> [args]
 ```
 
-Run it with Bash. Report what it prints. It is designed to be read aloud to the
-user almost verbatim.
+Run it with Bash and report what it prints. Its output is written to be read
+back to the user almost verbatim.
+
+## What this actually is
+
+The status line comes first. selecta shows what is playing **whatever is
+playing it** — Spotify, Apple Music, or any MPRIS player on Linux — and needs
+nothing installed to do that. Its own radio playback is a bonus for people who
+want music without leaving the terminal.
+
+So `selecta` with no arguments is a question, not a command. It never starts
+anything.
 
 ## The one rule that matters
 
-**Never construct a stream URL, station id, or playlist entry yourself.**
+**Never construct a stream URL, station id or playlist entry yourself.**
 
 Resolution belongs to `selecta resolve`, which owns the catalogues and the
-provider APIs. A URL you compose from memory will be wrong, dead, or an
-invention. If `resolve` returns nothing, say so and offer `selecta stations`.
+provider APIs. A URL composed from memory will be wrong, dead, or an invention.
+If `resolve` returns nothing, say so and offer `selecta stations`.
 
-**Never start playback unless the user asked for music.** The skill is
-`disable-model-invocation: true` precisely so this cannot happen by accident.
-Setting up someone's environment, starting a long task, or being told "I'm about
-to focus" are not requests for music.
-
-## Two backends, one command
-
-**Radio** is the default and opens no window. **YouTube** plays a specific
-recording and opens a small player window, because YouTube's policies forbid
-playing from a player that is not displayed.
-
-`selecta play` routes automatically: moods and genres stay on radio, named
-songs and artists go to YouTube. Pass the user's words through unchanged and
-let it decide.
+## Playing
 
 ```
-selecta play amapiano                    # radio, no window
-selecta play something calm for reading  # radio, no window
-selecta play sponono by kabza de small   # YouTube, opens the window
-selecta play --radio <anything>          # force radio
-selecta play --yt <anything>             # force YouTube
+selecta play amapiano                    # a genre
+selecta play something calm for reading  # a mood, in the user's words
+selecta play                             # resume what this repo sounds like
 ```
 
-**Never force `--yt` for an ambient or mood request.** A window appearing when
-someone asked for background music is the worst outcome this tool has.
+Pass the user's words through unchanged. The resolver is better at their phrasing
+than a cleaned-up version of it.
 
-`selecta play` with no argument resumes what this repository already sounds
-like, or starts a first station if the repo has no crate yet.
-
-Read `references/youtube.md` before explaining the window, the API key, or why
-a result looks like a re-upload rather than the official video.
+Radio opens no window and needs no account. If the user names **one specific
+recording** ("play Sponono by Kabza De Small"), radio cannot pick that; selecta
+routes to the selecta-youtube plugin if it is installed, and prints the install
+line if it is not. Relay that line; do not install anything.
 
 ## When a request has no obvious match
 
-This is the case worth handling well, and where you earn your keep.
-
-Run the resolver first and read `status`:
+This is the case worth handling well.
 
 ```
 selecta resolve --json "<the user's words>"
 ```
 
 - `status: "ok"` — `selecta play` will land it. Just play it.
-- `status: "none"` — nothing matched. Say so, suggest `selecta stations`. Do not
+- `status: "none"` — nothing matched. Say so, offer `selecta stations`. Do not
   guess.
-- `status: "ambiguous"` — there is no confident station, but `hint_tags` carries
+- `status: "ambiguous"` — no confident station, but `hint_tags` carries
   vocabulary the networked catalogues understand. **Rewrite the request into
-  catalogue vocabulary and resolve again**, rather than giving up or picking a
-  poor match.
+  catalogue vocabulary and resolve again** rather than giving up or settling for
+  a poor match.
 
-Rewriting means translating what the user said into genre terms a music
-directory would index. "Something with a log drum" is amapiano and afro house.
-"Aura farming music" is closer to phonk, drift or hard techno. "Music for
-staring at a wall" is drone or dark ambient. Use `references/stations.md` for
-the catalogue's own vocabulary, then:
+Rewriting means translating what the user said into terms a music directory
+would index. "Something with a log drum" is amapiano and afro house. "Aura
+farming music" is closer to phonk, drift or hard techno. "Music for staring at a
+wall" is drone or dark ambient. `references/stations.md` has the catalogue's own
+vocabulary. Then:
 
 ```
 selecta resolve --json --tags "amapiano,afro house,deep house" "log drum"
 ```
 
-If that still returns nothing, offer three real candidates from
-`selecta stations` and let the user choose. Never invent a fourth.
+Still nothing? Offer three real candidates from `selecta stations`. Never invent
+a fourth.
 
 ## Control
 
 ```
-selecta            # what is playing, plus this repo's crate
+selecta            # what is playing
 selecta pause      # and: selecta go
 selecta next       # next source in this repo's rotation
 selecta stop
 selecta vol 40     # also +10, -10, mute, unmute
 ```
 
-`next` changes station rather than track. Live radio has no track skip, and
-`selecta` says so in its own output. Do not describe it as skipping a song.
+These reach whichever backend is actually playing, including the YouTube window.
 
-## The per-repo crate
+`next` changes station, not track. Live radio has no track skip and selecta says
+so in its own output; do not describe it as skipping a song.
 
-This is the point of the tool, not a side feature.
+If the user is playing music in Spotify or Apple Music, `selecta` reports it but
+`pause` and `vol` do not control it. Say that plainly rather than pretending the
+command worked.
 
-```
-selecta crate          # what this repo sounds like
-selecta history        # tracks grouped by the commit they scored
-selecta resume         # put this repo's soundtrack back on
-selecta pin | ban | forget <source>
-```
+## Should trigger
 
-Every track is stamped with the branch and commit that were checked out while
-it played, so `history` reads as a record of the work, not a playlist. When a
-user asks what they were listening to during some piece of work, that is
-`selecta history`.
+- "put some music on", "play something", "music please"
+- "play amapiano" · "something calm for reading" · "lo-fi"
+- "pause the music" · "turn it down" · "next station" · "stop"
+- "what's playing?" · "what am I listening to?"
 
-Crates live in `~/.claude/selecta/`, keyed by repository. **Nothing is ever
-written into the user's repository.**
+## Should NOT trigger
 
-## Status line
+- "I'm about to focus for two hours" — an observation, not a request
+- "this refactor is going to be boring" — still not a request
+- "set up my dev environment" — nothing to do with music
+- "add the music player to my status line" — that is **selecta-statusline**
+- "what has this repo been listening to?" — that is **selecta-crate**
+- "the music stopped working" — that is **selecta-doctor**
+- "play Sponono by Kabza De Small" — one named recording, **selecta-youtube**
 
-`selecta statusline on` shows the current track in the status line. It edits the
-user's global `~/.claude/settings.json`, so consent happens in the conversation:
+## Side effects
 
-1. Run `selecta statusline on`. It writes nothing. **Exit 7 is the expected,
-   correct result**, not an error.
-2. Show the user its output verbatim: the JSON block and both disclosures.
-3. Ask, in your own message, whether to add it.
-4. **Stop and wait for their answer.**
-5. Only if they say yes: `selecta statusline on --user-confirmed`.
+Starts and stops an mpv process owned by the user. Writes only under
+`~/.claude/selecta/`. **Never writes into the user's repository** and never
+edits `settings.json`.
 
-Never pass `--user-confirmed` on the first call. Never edit `settings.json` with
-Write, Edit or a shell redirect. Exit 3 means selecta refused (`jsonc`,
-`unparseable`, `readonly`) — relay the paste block; that is correct, not a
-failure.
+## Reference
 
-`selecta statusline off` reverses it and restores any pre-existing status line.
-
-## When something is wrong
-
-```
-selecta doctor
-```
-
-Reports dependencies, whether the player is running, whether the status line is
-installed, and how many crates exist. If a player is missing it prints the exact
-install command for the platform. **Show the user the command; do not run a
-package manager for them.**
-
-Common cases are in `references/troubleshooting.md`. Read it before
-speculating about a failure.
-
-## Reference files
-
-- `references/youtube.md` — when YouTube is used, the mandatory player window,
-  embeddability failures, the API key and quota. Read before touching YouTube.
-- `references/stations.md` — the 46 SomaFM stations, their genres, and the mood
+- `references/stations.md` — the SomaFM catalogue, its genres and the mood
   vocabulary. Read this when rewriting an ambiguous request.
-- `references/statusline.md` — the exact settings block, merge behaviour, wrap
-  mode and how to undo. Read before touching the status line.
-- `references/troubleshooting.md` — every failure mode and its remedy. Read
-  before diagnosing.

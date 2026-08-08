@@ -1,0 +1,13 @@
+description = "Check selecta: dependencies, players, state, status line"
+
+prompt = """
+```
+"${CLAUDE_PLUGIN_ROOT}"/bin/selecta doctor
+```
+
+Report the rows that are failing, not all of them.
+
+If a dependency is missing, doctor prints the exact install command. Show the
+user that command. Do not run brew, apt, dnf, pacman, npm or any other package
+manager on their behalf.
+"""

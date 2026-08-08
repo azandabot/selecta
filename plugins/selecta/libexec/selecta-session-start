@@ -1,0 +1,55 @@
+#!/bin/sh
+# SessionStart hook. Two jobs, both cheap enough to run on every session.
+#
+#   1. Refresh ~/.claude/selecta/root. Plugins install under a versioned
+#      directory, so after an update the status line's copy of the launcher
+#      would otherwise point at a path that no longer exists. This heals it
+#      without the user running anything.
+#
+#   2. Once, and only once, mention that the status line exists.
+#
+# The nudge is the only discovery mechanism selecta has: the whole product is
+# a line in the status bar, and nobody installs a status line they were never
+# told about. It is also the thing most likely to annoy, so it fires at most
+# once per machine, never when a status line is already configured, and never
+# writes to settings.json itself. The model asks, the user decides, the CLI
+# writes.
+#
+# Anything on stdout here is injected into the session's context, so silence is
+# the default and every exit is 0. A hook that fails must not break a session.
+
+SELECTA_HOME=${SELECTA_HOME:-$HOME/.claude/selecta}
+SELECTA_SETTINGS=${SELECTA_SETTINGS:-$HOME/.claude/settings.json}
+ROOT=${CLAUDE_PLUGIN_ROOT:-}
+
+[ -n "$ROOT" ] && [ -d "$ROOT/lib" ] || exit 0
+mkdir -p "$SELECTA_HOME" 2>/dev/null || exit 0
+printf '%s\n' "$ROOT" >"$SELECTA_HOME/root" 2>/dev/null || true
+printf '%s/bin/selecta\n' "$ROOT" >"$SELECTA_HOME/bin-path" 2>/dev/null || true
+
+FLAG=$SELECTA_HOME/.statusline-offered
+[ -e "$FLAG" ] && exit 0
+
+# Every reason not to speak, checked before the flag is written so a machine
+# that is merely missing jq today can still be offered tomorrow.
+command -v jq >/dev/null 2>&1 || exit 0
+[ -f "$SELECTA_SETTINGS" ] || exit 0
+[ -w "$SELECTA_SETTINGS" ] || exit 0
+jq -e . "$SELECTA_SETTINGS" >/dev/null 2>&1 || exit 0
+jq -e '.statusLine' "$SELECTA_SETTINGS" >/dev/null 2>&1 && exit 0
+
+# Written before the message, not after. If this session crashes, is
+# interrupted, or the model never relays it, the correct outcome is still
+# "asked once" rather than "asks forever".
+: >"$FLAG" 2>/dev/null || exit 0
+
+cat <<'EOF'
+selecta is installed and can show what you are playing in the status line.
+It reads Spotify, Apple Music or any MPRIS player, so it works with whatever
+the user already has open. Nothing is running yet and nothing has been changed.
+
+Mention this once, briefly, if there is a natural moment. Do not interrupt what
+the user is doing, and do not install it: `selecta statusline on` writes nothing
+until the user has said yes in the conversation. If they are busy, drop it.
+EOF
+exit 0
