@@ -209,6 +209,28 @@ selecta_json_get() {
 	printf '%s' "$_jg_out"
 }
 
+# --- config -----------------------------------------------------------------
+
+selecta_cfg_get() {
+	# selecta_cfg_get <jq-path> <default>
+	[ -s "$SELECTA_CONFIG" ] || {
+		printf '%s' "$2"
+		return 0
+	}
+	_cg=$(jq -c "$1 // empty" "$SELECTA_CONFIG" 2>/dev/null)
+	[ -n "$_cg" ] || _cg=$2
+	printf '%s' "$_cg"
+}
+
+selecta_cfg_set() {
+	# selecta_cfg_set <jq-path> <json-value>
+	_cs_cur='{}'
+	[ -s "$SELECTA_CONFIG" ] && jq -e . "$SELECTA_CONFIG" >/dev/null 2>&1 &&
+		_cs_cur=$(cat "$SELECTA_CONFIG")
+	printf '%s' "$_cs_cur" | jq --argjson v "$2" "$1 = \$v" |
+		selecta_atomic_write "$SELECTA_CONFIG"
+}
+
 # A corrupt state or soundtrack file is preserved rather than discarded: these
 # accumulate months of listening history and silently losing one is worse than
 # any error message.

@@ -1,10 +1,9 @@
 #!/bin/sh
 # selecta command-line entry point.
 #
-# This is a THIN CLIENT. It never writes to durable state. Every mutation is
-# sent over the control socket to libexec/selecta-supervisor, which runs
-# unsandboxed as a plugin monitor and owns all writes. That split is what keeps
-# the tool working under the macOS sandbox instead of fighting it.
+# A thin client. It resolves queries, hands metadata to the supervisor through
+# run/source.json, and drives playback over mpv's IPC socket. The supervisor
+# owns every durable write.
 
 set -eu
 
@@ -29,6 +28,18 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/repo.sh"
 # shellcheck source=lib/resolve.sh
 . "$SELECTA_ROOT/lib/resolve.sh"
+# shellcheck source=lib/resolve-net.sh
+. "$SELECTA_ROOT/lib/resolve-net.sh"
+# shellcheck source=lib/player.sh
+. "$SELECTA_ROOT/lib/player.sh"
+# shellcheck source=lib/ipc.sh
+. "$SELECTA_ROOT/lib/ipc.sh"
+# shellcheck source=lib/state.sh
+. "$SELECTA_ROOT/lib/state.sh"
+# shellcheck source=lib/soundtrack.sh
+. "$SELECTA_ROOT/lib/soundtrack.sh"
+# shellcheck source=lib/statusline.sh
+. "$SELECTA_ROOT/lib/statusline.sh"
 
 usage() {
 	cat <<'EOF'
@@ -58,8 +69,6 @@ netlabels collection. Nothing is downloaded and no account is required.
 EOF
 }
 
-# Aliases are resolved silently. Anything a user would plausibly type for an
-# action we already have should reach that action rather than an error.
 canonicalize() {
 	case $1 in
 	quiet) echo stop ;;
@@ -72,77 +81,482 @@ canonicalize() {
 	esac
 }
 
-# A mistyped subcommand must never fall through to playback. "Explicit only"
-# is a promise about audio, and guessing here would break it.
 unknown_subcommand() {
-	_us_cmd=$1
-	case $_us_cmd in
-	lofi | jazz | ambient | amapiano | chill | focus | drone | synthwave | classical | house)
-		printf 'selecta: unknown command "%s". Did you mean: selecta play %s\n' \
-			"$_us_cmd" "$_us_cmd" >&2
-		;;
-	*)
-		printf 'selecta: unknown command "%s". Try: selecta play %s\n' \
-			"$_us_cmd" "$_us_cmd" >&2
-		printf 'Run "selecta --help" for the full list.\n' >&2
-		;;
-	esac
+	printf 'selecta: unknown command "%s". Did you mean: selecta play %s\n' "$1" "$1" >&2
+	printf 'Run "selecta --help" for the full list.\n' >&2
 	exit "$EX_USAGE"
 }
 
-stub() {
-	printf 'cmd=%s args=%s\n' "$1" "${2-}"
+# --- helpers ----------------------------------------------------------------
+
+repo_json() {
+	selecta_repo_identity "$PWD"
+	jq -n --arg key "$SELECTA_REPO_KEY" --arg name "$SELECTA_REPO_NAME" \
+		--arg scope "$SELECTA_REPO_SCOPE" --arg branch "$SELECTA_REPO_BRANCH" \
+		--arg commit "$SELECTA_REPO_COMMIT" \
+		--argjson aliases "$(printf '%s' "$SELECTA_REPO_ALIASES" | jq -R -s 'split("\n")|map(select(length>0))')" \
+		'{key: $key, display_name: $name, scope: $scope, branch: $branch,
+		  commit: $commit, aliases: $aliases}'
 }
 
-# selecta resolve [--json] [--offline] <free text>
-#
-# The machine-readable half of the natural-language path. SKILL.md tells the
-# model to call this and act on `status`, never to invent a stream URL.
-cmd_resolve() {
-	_rs_json=0
-	_rs_query=''
-	for _rs_a in "$@"; do
-		case $_rs_a in
-		--json) _rs_json=1 ;;
-		--offline) SELECTA_OFFLINE=1 ;;
-		--*)
-			printf 'selecta: unknown option %s\n' "$_rs_a" >&2
-			exit "$EX_USAGE"
-			;;
-		*) _rs_query="$_rs_query${_rs_query:+ }$_rs_a" ;;
-		esac
-	done
-	export SELECTA_OFFLINE
+human_secs() {
+	_hs=${1:-0}
+	case $_hs in '' | *[!0-9]*) _hs=0 ;; esac
+	if [ "$_hs" -lt 60 ]; then
+		printf '%ds' "$_hs"
+	elif [ "$_hs" -lt 3600 ]; then
+		printf '%dm' "$((_hs / 60))"
+	else
+		printf '%dh %dm' "$((_hs / 3600))" "$(((_hs % 3600) / 60))"
+	fi
+}
 
-	[ -n "$_rs_query" ] || selecta_die "$EX_USAGE" "resolve needs something to look for"
+# Starts the supervisor when no player is up. Preferred path is the plugin
+# monitor, which the host starts on skill invoke and reaps at session end. This
+# detached fallback exists for direct CLI use and for hosts where monitors are
+# unavailable; the supervisor's watchdog is what stops it becoming an orphan.
+ensure_player() {
+	selecta_ipc_up && return 0
+	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+	if [ "$(selecta_engine)" = none ]; then
+		printf 'selecta: no player installed.\n\n  %s\n\nThen run: selecta play\n' \
+			"$(selecta_install_hint 'mpv jq')" >&2
+		exit "$EX_MISSING_DEP"
+	fi
+	: >"$SELECTA_HEARTBEAT"
+	if selecta_have setsid; then
+		setsid "$SELECTA_ROOT/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
+	else
+		nohup "$SELECTA_ROOT/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
+	fi
+	selecta_mpv_wait 200 || selecta_die "$EX_MISSING_DEP" "player did not start. Run: selecta doctor"
+}
+
+# Resolves a source id to a live URL. The resolver, never the caller, decides
+# what URL a name maps to.
+stream_for() {
+	case $1 in
+	somafm:*) selecta_somafm_stream "${1#somafm:}" ;;
+	rb:*) selecta_rb_stream "${1#rb:}" ;;
+	*) return "$EX_NOTFOUND" ;;
+	esac
+}
+
+# Hands the supervisor what mpv cannot know, then starts playback. source.json
+# is written first so the supervisor has it before the file-loaded event.
+start_source() {
+	_ss_card=$1
+	_ss_urls=$(stream_for "$(printf '%s' "$_ss_card" | jq -r .id)") ||
+		selecta_die "$EX_NETWORK" "could not reach that stream"
+	[ -n "$_ss_urls" ] || selecta_die "$EX_NETWORK" "no playable stream for that source"
+
+	_ss_first=$(printf '%s\n' "$_ss_urls" | head -1)
+	_ss_mirrors=$(printf '%s\n' "$_ss_urls" | tail -n +2 | jq -R -s 'split("\n")|map(select(length>0))')
+
+	printf '%s' "$_ss_card" | jq \
+		--arg uri "$_ss_first" --argjson mirrors "$_ss_mirrors" \
+		--argjson repo "$(repo_json)" \
+		'. + {uri: $uri, mirrors: $mirrors, repo: $repo}' |
+		selecta_atomic_write "$SELECTA_RUN/source.json"
+
+	ensure_player
+	selecta_ipc_command "[\"loadfile\",$(printf '%s' "$_ss_first" | jq -R .)]" >/dev/null
+	printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
+}
+
+# --- commands ---------------------------------------------------------------
+
+cmd_status() {
+	_cs_state=$(selecta_state_read)
+	_cs_status=$(printf '%s' "$_cs_state" | jq -r '.status // "stopped"')
+	if [ "$_cs_status" = stopped ]; then
+		printf 'Nothing playing.\n'
+	else
+		printf '%s\n' "$(printf '%s' "$_cs_state" | jq -r '
+			"\(.status)  \(.source.title // "?")" +
+			(if (.now.title // "") != "" then "\n        \(.now.artist // "") — \(.now.title)" else "" end)')"
+	fi
+	_cs_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null) || {
+		printf '\nNo crate yet for this repo. Start one: selecta play <mood>\n'
+		return 0
+	}
+	printf '\n%s: %s across %s sources\n' \
+		"$(printf '%s' "$_cs_doc" | jq -r .display_name)" \
+		"$(human_secs "$(printf '%s' "$_cs_doc" | jq -r '.totals.seconds')")" \
+		"$(printf '%s' "$_cs_doc" | jq -r '.sources|length')"
+	printf 'Resume: selecta resume\n'
+}
+
+cmd_play() {
+	_cp_q=$*
+	if [ -z "$_cp_q" ]; then
+		cmd_resume
+		return $?
+	fi
 	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
 
-	_rs_out=$(selecta_resolve "$_rs_query") ||
-		selecta_die "$EX_NOTFOUND" "resolver failed for \"$_rs_query\""
+	_cp_res=$(selecta_resolve "$_cp_q")
+	_cp_status=$(printf '%s' "$_cp_res" | jq -r .status)
 
-	if [ "$_rs_json" -eq 1 ]; then
-		printf '%s\n' "$_rs_out"
+	if [ "$_cp_status" != ok ]; then
+		_cp_tags=$(printf '%s' "$_cp_res" | jq -r '.hint_tags|join(",")')
+		if [ -n "$_cp_tags" ]; then
+			_cp_res=$(selecta_resolve_net "$_cp_q" "$_cp_tags")
+			_cp_status=$(printf '%s' "$_cp_res" | jq -r .status)
+		fi
+	fi
+
+	if [ "$_cp_status" != ok ]; then
+		printf 'selecta: nothing solid matched "%s".\n' "$_cp_q" >&2
+		_cp_n=$(printf '%s' "$_cp_res" | jq -r '.candidates|length')
+		if [ "$_cp_n" -gt 0 ]; then
+			printf 'Closest:\n' >&2
+			printf '%s' "$_cp_res" | jq -r '.candidates[0:3][] | "  \(.id)  \(.title)"' >&2
+		fi
+		printf 'Browse instead: selecta stations\n' >&2
+		exit "$EX_NOTFOUND"
+	fi
+
+	start_source "$(printf '%s' "$_cp_res" | jq -c '.candidates[0]')"
+}
+
+cmd_resume() {
+	_cr_key=$(repo_json | jq -r .key)
+	_cr_doc=$(selecta_st_load "$_cr_key" 2>/dev/null) || {
+		_cr_default=$(selecta_cfg_get '.default_station' '"somafm:groovesalad"' | tr -d '"')
+		printf 'New crate for %s.\n' "$(repo_json | jq -r .display_name)"
+		printf 'Starting with your default. Steer it: selecta play <mood>\n'
+		_cr_card=$(selecta_resolve "${_cr_default#somafm:}" | jq -c '.candidates[0]')
+		[ "$_cr_card" != null ] || selecta_die "$EX_NOTFOUND" "default station is not resolvable"
+		start_source "$_cr_card"
+		return 0
+	}
+	_cr_top=$(selecta_st_rank "$_cr_doc" | jq -c '.[0] // empty')
+	[ -n "$_cr_top" ] || selecta_die "$EX_NOTFOUND" "this crate has no playable sources left"
+	start_source "$(printf '%s' "$_cr_top" | jq -c '{id,kind,provider,title,resolver}')"
+}
+
+cmd_next() {
+	_cn_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null) ||
+		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
+	_cn_cur=$(selecta_state_read | jq -r '.source.id // ""')
+	_cn_ranked=$(selecta_st_rank "$_cn_doc")
+	_cn_count=$(printf '%s' "$_cn_ranked" | jq 'length')
+	[ "$_cn_count" -gt 0 ] || selecta_die "$EX_NOTFOUND" "nothing to rotate to"
+	_cn_next=$(printf '%s' "$_cn_ranked" | jq -c --arg cur "$_cn_cur" '
+		(map(.id) | index($cur)) as $i
+		| if $i == null then .[0] else .[(($i + 1) % length)] end')
+	# A live radio stream cannot skip a track. Saying so is better than
+	# pretending: the station changes, and the user should know that.
+	printf 'Live radio has no track skip; changing station.\n'
+	start_source "$(printf '%s' "$_cn_next" | jq -c '{id,kind,provider,title,resolver}')"
+}
+
+cmd_pause() {
+	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
+	selecta_ipc_set pause true
+	printf 'Paused.\n'
+}
+
+cmd_go() {
+	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
+	selecta_ipc_set pause false
+	printf 'Playing.\n'
+}
+
+cmd_stop() {
+	selecta_ipc_up || {
+		printf 'Nothing playing.\n'
+		return 0
+	}
+	selecta_ipc_command '["stop"]' >/dev/null
+	printf 'Stopped.\n'
+}
+
+cmd_vol() {
+	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
+	_cv=${1:-}
+	[ -n "$_cv" ] || {
+		printf '%s\n' "$(selecta_ipc_get volume | cut -d. -f1)"
+		return 0
+	}
+	case $_cv in
+	mute)
+		selecta_ipc_set mute true
+		printf 'Muted.\n'
+		return 0
+		;;
+	unmute)
+		selecta_ipc_set mute false
+		printf 'Unmuted.\n'
+		return 0
+		;;
+	+*) _cv=$(($(selecta_ipc_get volume | cut -d. -f1) + ${_cv#+})) ;;
+	-*) _cv=$(($(selecta_ipc_get volume | cut -d. -f1) - ${_cv#-})) ;;
+	*[!0-9]*) selecta_die "$EX_USAGE" "volume takes 0-100, +N, -N, mute or unmute" ;;
+	esac
+	[ "$_cv" -lt 0 ] && _cv=0
+	[ "$_cv" -gt 100 ] && _cv=100
+	selecta_ipc_set volume "$_cv"
+	printf 'Volume %s\n' "$_cv"
+}
+
+cmd_crate() {
+	_cc_repo=$(repo_json)
+	_cc_doc=$(selecta_st_load "$(printf '%s' "$_cc_repo" | jq -r .key)" 2>/dev/null) || {
+		printf 'No crate yet for %s.\nStart one: selecta play <mood>\n' \
+			"$(printf '%s' "$_cc_repo" | jq -r .display_name)"
+		return 0
+	}
+	_cc_total=$(printf '%s' "$_cc_doc" | jq -r '.totals.seconds')
+	_cc_tracks=$(printf '%s' "$_cc_doc" | jq -r '.totals.tracks')
+	printf '\n  %s   %s · %s track%s · since %s\n\n' \
+		"$(printf '%s' "$_cc_doc" | jq -r .display_name)" \
+		"$(human_secs "$_cc_total")" \
+		"$_cc_tracks" \
+		"$([ "$_cc_tracks" = 1 ] || printf s)" \
+		"$(printf '%s' "$_cc_doc" | jq -r '.created_at|split("T")[0]')"
+
+	selecta_st_rank "$_cc_doc" | jq -r --argjson total "$([ "$_cc_total" -gt 0 ] && echo "$_cc_total" || echo 1)" '
+		.[0:6][] |
+		((.seconds // 0) * 10 / $total | floor) as $bars |
+		"  \(.title[0:20] + (" " * (20 - (.title[0:20]|length))))" +
+		"\(if .pinned then "📌" else "  " end) " +
+		"\("█" * (if $bars > 10 then 10 else $bars end))\("░" * (10 - (if $bars > 10 then 10 else $bars end)))" +
+		"  \(.plays) plays"'
+
+	_cc_top=$(printf '%s' "$_cc_doc" | jq -r '
+		[.tracks[] | select(.title != "") | "\(.artist) — \(.title)"]
+		| group_by(.) | max_by(length) | if . == null then "" else "\(.[0])  (\(length)×)" end' 2>/dev/null)
+	[ -n "$_cc_top" ] && printf '\n  On repeat        %s\n' "$_cc_top"
+	_cc_first=$(printf '%s' "$_cc_doc" | jq -r '
+		.tracks[0] // empty | select(.title != "")
+		| "\(.artist) — \(.title), on \(.t|split("T")[0])" +
+		  (if .commit != "" then " while you wrote \(.commit)" else "" end)')
+	[ -n "$_cc_first" ] && printf '  First track      %s\n' "$_cc_first"
+	printf '\n  selecta resume  →  %s\n\n' \
+		"$(selecta_st_rank "$_cc_doc" | jq -r '.[0].title // "nothing yet"')"
+}
+
+cmd_history() {
+	_ch_n=${1:-30}
+	case $_ch_n in *[!0-9]*) _ch_n=30 ;; esac
+	_ch_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null) || {
+		printf 'No crate yet for this repo.\n'
+		return 0
+	}
+	printf '%s' "$_ch_doc" | jq -r --argjson n "$_ch_n" '
+		[.tracks[] | select(.title != "")] | .[-$n:] | reverse
+		| group_by(.commit)
+		| sort_by(.[0].t) | reverse
+		| .[] |
+		"  \(if .[0].commit == "" then "(no commit)" else .[0].commit end)   \(.[0].t|split("T")[0]) \(.[0].t|split("T")[1][0:5])\n" +
+		"           \(length) tracks\n" +
+		(map("             \(.artist) — \(.title)") | join("\n"))'
+}
+
+cmd_curate() {
+	_cu_action=$1
+	shift
+	_cu_target=$*
+	_cu_key=$(repo_json | jq -r .key)
+	_cu_doc=$(selecta_st_load "$_cu_key" 2>/dev/null) ||
+		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
+
+	if [ "$_cu_action" = forget ] && [ "$_cu_target" = all ]; then
+		printf 'This deletes the whole crate for this repo. Type the repo name to confirm: '
+		read -r _cu_confirm
+		[ "$_cu_confirm" = "$(printf '%s' "$_cu_doc" | jq -r .display_name)" ] || {
+			printf 'Not confirmed, nothing changed.\n'
+			return 0
+		}
+		rm -f "$(selecta_st_file_for "$_cu_key")"
+		printf 'Crate deleted.\n'
 		return 0
 	fi
 
-	_rs_status=$(printf '%s' "$_rs_out" | jq -r '.status')
-	case $_rs_status in
+	[ -n "$_cu_target" ] || _cu_target=$(selecta_state_read | jq -r '.source.id // ""')
+	[ -n "$_cu_target" ] || selecta_die "$EX_USAGE" "which source? try: selecta crate"
+
+	case $_cu_action in
+	pin) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(if .id == $s or .title == $s then .pinned = true else . end)') ;;
+	ban) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(if .id == $s or .title == $s then .banned = true else . end)') ;;
+	forget) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(select(.id != $s and .title != $s))') ;;
+	esac
+	selecta_st_save "$_cu_key" "$_cu_new"
+	printf '%sed %s\n' "$_cu_action" "$_cu_target"
+}
+
+cmd_stations() {
+	_cst_q=$*
+	if [ -z "$_cst_q" ]; then
+		jq -r '.channels[] | "  \(.id[0:18] + (" " * (18 - (.id[0:18]|length))))\(.title)  — \(.genre)"' \
+			"$(selecta_catalog)"
+		return 0
+	fi
+	_cst_res=$(selecta_resolve "$_cst_q")
+	_cst_n=$(printf '%s' "$_cst_res" | jq -r '.candidates|length')
+	if [ "$_cst_n" -eq 0 ]; then
+		_cst_tags=$(printf '%s' "$_cst_res" | jq -r '.hint_tags|join(",")')
+		[ -n "$_cst_tags" ] && _cst_res=$(selecta_resolve_net "$_cst_q" "$_cst_tags")
+	fi
+	printf '%s' "$_cst_res" | jq -r '.candidates[] | "  \(.score)  \(.id)  \(.title)"'
+	printf '\nPlay one: selecta play <id>\n'
+}
+
+cmd_statusline() {
+	case ${1:-status} in
+	status)
+		printf 'settings: %s\nstate: %s\ninstalled: %s\n' \
+			"$(selecta_sl_settings_path)" "$(selecta_sl_detect)" \
+			"$(selecta_cfg_get '.statusline.installed' false)"
+		;;
+	on)
+		_sl_state=$(selecta_sl_detect)
+		case $_sl_state in
+		jsonc | unparseable | readonly)
+			printf 'selecta: %s is %s, so it will not be edited automatically.\n\n' \
+				"$(selecta_sl_settings_path)" "$_sl_state" >&2
+			printf 'Add this yourself:\n\n%s\n' "$(selecta_sl_preview)" >&2
+			exit "$EX_UNWRITABLE"
+			;;
+		esac
+		printf 'selecta would add this to %s:\n\n%s\n' \
+			"$(selecta_sl_settings_path)" "$(selecta_sl_preview)"
+		printf '\nTwo things worth knowing first:\n'
+		printf '  • Setting a status line hides most of the built-in footer key hints.\n'
+		printf '  • This edits your global settings, not this repository.\n'
+		[ "$_sl_state" = foreign ] &&
+			printf '  • You already have a status line. Yours stays, and runs first.\n'
+		printf '\nA backup is written before any change. Undo with: selecta statusline off\n'
+		printf '\nAdd it? [y/N] '
+		read -r _sl_yes
+		case $_sl_yes in
+		y | Y | yes | YES) ;;
+		*)
+			printf 'Nothing changed.\n'
+			return 0
+			;;
+		esac
+		_sl_mode=$(selecta_sl_install) || selecta_die "$EX_UNWRITABLE" "could not write settings"
+		printf 'Installed (%s mode). Restart or open a new session to see it.\n' "$_sl_mode"
+		;;
+	off)
+		selecta_sl_uninstall || selecta_die "$EX_UNWRITABLE" "could not write settings"
+		printf 'Removed. Footer key hints come back on the next session.\n'
+		;;
+	*) selecta_die "$EX_USAGE" "statusline takes on, off or status" ;;
+	esac
+}
+
+cmd_doctor() {
+	_cd_fail=0
+	printf 'selecta %s\n\n' "$SELECTA_VERSION"
+
+	for _cd_t in jq curl git; do
+		if selecta_have "$_cd_t"; then
+			printf '  ok       %s\n' "$_cd_t"
+		else
+			printf '  MISSING  %s\n' "$_cd_t"
+			_cd_fail=1
+		fi
+	done
+
+	_cd_engine=$(selecta_engine)
+	case $_cd_engine in
+	mpv) printf '  ok       mpv (%s)\n' "$(mpv --version 2>/dev/null | head -1 | cut -d' ' -f2)" ;;
+	ffplay) printf '  partial  ffplay only. Volume and pause are limited; install mpv for the full experience.\n' ;;
 	none)
-		printf 'Nothing matched "%s".\nTry: selecta stations\n' "$_rs_query" >&2
-		exit "$EX_NOTFOUND"
+		printf '  MISSING  no player\n'
+		_cd_fail=1
 		;;
 	esac
-	printf '%s' "$_rs_out" | jq -r '
-		"\(.status)  (confidence \(.confidence))",
-		(if (.hint_tags|length) > 0 then "tags: " + (.hint_tags|join(", ")) else empty end),
-		"",
-		(.candidates[] | "  \(.score)  \(.id)\n        \(.title) — \(.genre)  [\(.why)]")'
+
+	if [ "$_cd_fail" -eq 1 ]; then
+		printf '\nInstall what is missing:\n\n  %s\n\n' "$(selecta_install_hint 'mpv jq')"
+		printf 'selecta will not run that for you. Copy it if it looks right.\n'
+	fi
+
+	selecta_ensure_dirs 2>/dev/null || true
+	printf '\n  home     %s (%s)\n' "$SELECTA_HOME" \
+		"$([ -w "$SELECTA_HOME" ] 2>/dev/null && echo writable || echo "NOT WRITABLE")"
+	printf '  player   %s\n' "$(selecta_ipc_up && echo running || echo "not running")"
+	printf '  status   %s\n' "$(selecta_sl_detect)"
+	printf '  crates   %s\n' \
+		"$(find "$SELECTA_SOUNDTRACKS" -name '*.json' ! -name index.json 2>/dev/null | wc -l | tr -d ' ')"
+	_cd_jam=$(selecta_cfg_get '.jamendo.client_id' '""' | tr -d '"')
+	printf '  jamendo  %s\n' "$([ -n "$_cd_jam" ] && echo "key set" || echo "no key (SomaFM and radio-browser still work)")"
+	[ "$_cd_fail" -eq 1 ] && exit "$EX_MISSING_DEP"
+	return 0
+}
+
+cmd_export() {
+	_ce_path=${1:-}
+	[ -n "$_ce_path" ] || selecta_die "$EX_USAGE" "export needs a destination path"
+	_ce_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null) ||
+		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
+	# Refuses to write inside the repo unless asked explicitly, so an export
+	# never lands in someone's next commit by accident.
+	_ce_abs=$(selecta_realpath "$_ce_path")
+	_ce_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+	case ${_ce_top:+$_ce_abs} in
+	"$_ce_top"/*)
+		printf 'selecta: %s is inside this repository.\n' "$_ce_abs" >&2
+		printf 'Write it somewhere else, or confirm you want it committed.\n' >&2
+		exit "$EX_USAGE"
+		;;
+	esac
+	printf '%s' "$_ce_doc" | jq -r '.sources[] | "#EXTINF:-1,\(.title)\n\(.uri // "")"' |
+		{
+			printf '#EXTM3U\n'
+			cat
+		} >"$_ce_abs.m3u8"
+	printf '%s\n' "$_ce_doc" >"$_ce_abs.json"
+	printf 'Wrote %s.m3u8 and %s.json\n' "$_ce_abs" "$_ce_abs"
+}
+
+cmd_config() {
+	[ $# -gt 0 ] || {
+		[ -s "$SELECTA_CONFIG" ] && cat "$SELECTA_CONFIG" || printf '{}\n'
+		return 0
+	}
+	_cfg_key=$1
+	shift
+	[ $# -gt 0 ] || {
+		selecta_cfg_get ".$_cfg_key" 'null'
+		printf '\n'
+		return 0
+	}
+	_cfg_val=$*
+	case $_cfg_val in
+	true | false | null | [0-9]*) ;;
+	*) _cfg_val=$(printf '%s' "$_cfg_val" | jq -R .) ;;
+	esac
+	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+	selecta_cfg_set ".$_cfg_key" "$_cfg_val"
+	printf '%s = %s\n' "$_cfg_key" "$_cfg_val"
+}
+
+cmd_uninstall() {
+	selecta_sl_uninstall 2>/dev/null || true
+	selecta_ipc_quit
+	if [ "${1:-}" = --purge ]; then
+		printf 'This deletes every crate for every repo. Type PURGE to confirm: '
+		read -r _cu_c
+		[ "$_cu_c" = PURGE ] || {
+			printf 'Not confirmed. Status line removed, data kept.\n'
+			return 0
+		}
+		rm -rf "$SELECTA_HOME"
+		printf 'Removed %s\n' "$SELECTA_HOME"
+	else
+		printf 'Status line removed and player stopped. Crates kept in %s\n' "$SELECTA_HOME"
+		printf 'To delete them too: selecta uninstall --purge\n'
+	fi
 }
 
 main() {
-	if [ $# -eq 0 ]; then
-		set -- status
-	fi
+	[ $# -gt 0 ] || set -- status
 
 	case $1 in
 	-h | --help | help)
@@ -157,31 +571,74 @@ main() {
 
 	cmd=$(canonicalize "$1")
 	shift
-	args=$*
 
 	case $cmd in
-	'' | status) stub status "$args" ;;
-	play) stub play "$args" ;;
-	resume) stub resume "$args" ;;
-	pause) stub pause "$args" ;;
-	go) stub go "$args" ;;
-	next) stub next "$args" ;;
-	stop) stub stop "$args" ;;
-	vol) stub vol "$args" ;;
-	crate) stub crate "$args" ;;
-	history) stub history "$args" ;;
-	pin) stub pin "$args" ;;
-	ban) stub ban "$args" ;;
-	forget) stub forget "$args" ;;
-	stations) stub stations "$args" ;;
-	statusline) stub statusline "$args" ;;
-	doctor) stub doctor "$args" ;;
-	export) stub export "$args" ;;
-	config) stub config "$args" ;;
+	'' | status) cmd_status ;;
+	play) cmd_play "$@" ;;
+	resume) cmd_resume ;;
+	next) cmd_next ;;
+	pause) cmd_pause ;;
+	go) cmd_go ;;
+	stop) cmd_stop ;;
+	vol) cmd_vol "$@" ;;
+	crate) cmd_crate ;;
+	history) cmd_history "$@" ;;
+	pin | ban | forget) cmd_curate "$cmd" "$@" ;;
+	stations) cmd_stations "$@" ;;
+	statusline) cmd_statusline "$@" ;;
+	doctor) cmd_doctor ;;
+	export) cmd_export "$@" ;;
+	config) cmd_config "$@" ;;
 	resolve) cmd_resolve "$@" ;;
-	uninstall) stub uninstall "$args" ;;
+	uninstall) cmd_uninstall "$@" ;;
 	*) unknown_subcommand "$cmd" ;;
 	esac
+}
+
+# selecta resolve [--json] [--offline] <free text>
+# The machine-readable half of the natural-language path.
+cmd_resolve() {
+	_rs_json=0
+	_rs_tags=''
+	_rs_query=''
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--json) _rs_json=1 ;;
+		--offline) SELECTA_OFFLINE=1 ;;
+		--tags)
+			shift
+			_rs_tags=${1:-}
+			;;
+		--*) selecta_die "$EX_USAGE" "unknown option $1" ;;
+		*) _rs_query="$_rs_query${_rs_query:+ }$1" ;;
+		esac
+		shift
+	done
+	export SELECTA_OFFLINE
+
+	[ -n "$_rs_query" ] || [ -n "$_rs_tags" ] ||
+		selecta_die "$EX_USAGE" "resolve needs something to look for"
+	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+
+	if [ -n "$_rs_tags" ]; then
+		_rs_out=$(selecta_resolve_net "$_rs_query" "$_rs_tags")
+	else
+		_rs_out=$(selecta_resolve "$_rs_query")
+		if [ "$(printf '%s' "$_rs_out" | jq -r .status)" != ok ]; then
+			_rs_hint=$(printf '%s' "$_rs_out" | jq -r '.hint_tags|join(",")')
+			[ -n "$_rs_hint" ] && _rs_out=$(selecta_resolve_net "$_rs_query" "$_rs_hint")
+		fi
+	fi
+
+	if [ "$_rs_json" -eq 1 ]; then
+		printf '%s\n' "$_rs_out"
+		return 0
+	fi
+	printf '%s' "$_rs_out" | jq -r '
+		"\(.status)  (confidence \(.confidence))",
+		(if (.hint_tags|length) > 0 then "tags: " + (.hint_tags|join(", ")) else empty end),
+		"",
+		(.candidates[] | "  \(.score)  \(.id)\n        \(.title) — \(.genre // "")  [\(.why)]")'
 }
 
 main "$@"

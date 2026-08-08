@@ -1,0 +1,266 @@
+#!/bin/sh
+# selecta supervisor: the only long-lived process, and the only writer of
+# durable state.
+#
+# Runs as a plugin monitor, which means two hard rules:
+#   1. stdout is surfaced to the session as a notification, so it is closed on
+#      line one. Only a terminal, user-actionable error may ever reach it.
+#   2. Nothing here may block forever. A wedged supervisor is a wedged player
+#      with no way to stop it.
+#
+# Owns mpv as a child, holds a persistent IPC connection for property events,
+# and writes run/state.json plus run/segment on every change.
+
+set -u
+
+SELECTA_BIN=$0
+while [ -L "$SELECTA_BIN" ]; do
+	_link=$(readlink -- "$SELECTA_BIN")
+	case $_link in
+	/*) SELECTA_BIN=$_link ;;
+	*) SELECTA_BIN=$(dirname -- "$SELECTA_BIN")/$_link ;;
+	esac
+done
+SELECTA_ROOT=$(cd -- "$(dirname -- "$SELECTA_BIN")/.." && pwd -P)
+export SELECTA_ROOT
+
+# shellcheck source=lib/common.sh
+. "$SELECTA_ROOT/lib/common.sh"
+# shellcheck source=lib/repo.sh
+. "$SELECTA_ROOT/lib/repo.sh"
+# shellcheck source=lib/state.sh
+. "$SELECTA_ROOT/lib/state.sh"
+# shellcheck source=lib/player.sh
+. "$SELECTA_ROOT/lib/player.sh"
+# shellcheck source=lib/ipc.sh
+. "$SELECTA_ROOT/lib/ipc.sh"
+# shellcheck source=lib/soundtrack.sh
+. "$SELECTA_ROOT/lib/soundtrack.sh"
+
+MODE=monitor
+ONCE=0
+for _a in "$@"; do
+	case $_a in
+	--monitor) MODE=monitor ;;
+	--detached) MODE=detached ;;
+	--once)
+		ONCE=1
+		MODE=once
+		;;
+	esac
+done
+
+# Rule 1. Anything that must reach the user goes through sup_fatal.
+[ "$ONCE" -eq 1 ] || exec >/dev/null
+
+MPV_PID=''
+FIFO=''
+HEARTBEAT_LIMIT=120
+
+sup_fatal() {
+	printf 'selecta: %s\n' "$*" >&2
+	selecta_log error "$*"
+}
+
+# Invoked from the trap below, which shellcheck does not treat as a call site.
+# shellcheck disable=SC2329
+sup_cleanup() {
+	sup_bank_seconds
+	selecta_ipc_quit
+	[ -n "$MPV_PID" ] && kill "$MPV_PID" 2>/dev/null
+	[ -n "$FIFO" ] && rm -f "$FIFO"
+	rm -f "$SELECTA_MPV_SOCK" "$SELECTA_PIDFILE" 2>/dev/null
+	: >"$SELECTA_SEGMENT" 2>/dev/null || true
+	selecta_state_write stopped 2>/dev/null || true
+	selecta_lock_release
+	selecta_log info "supervisor stopped"
+}
+trap 'sup_cleanup; exit 0' INT TERM HUP EXIT
+
+# --- singleton --------------------------------------------------------------
+# One player per user, not per session. A second session's monitor must lose
+# quietly: a stdout line here would become a notification in that session.
+selecta_ensure_dirs || {
+	sup_fatal "cannot write to $SELECTA_HOME"
+	exit "$EX_UNWRITABLE"
+}
+selecta_lock_reap_stale
+if ! selecta_lock_acquire; then
+	trap - EXIT
+	exit 0
+fi
+printf '%s\n' "$$" >"$SELECTA_PIDFILE"
+: >"$SELECTA_HEARTBEAT"
+selecta_log info "supervisor started (mode=$MODE pid=$$)"
+
+# --- player -----------------------------------------------------------------
+if [ "$(selecta_engine)" != mpv ]; then
+	sup_fatal "mpv is not installed. Run: selecta doctor"
+	exit "$EX_MISSING_DEP"
+fi
+
+MPV_PID=$(selecta_mpv_start)
+if ! selecta_mpv_wait; then
+	sup_fatal "mpv failed to start"
+	exit "$EX_MISSING_DEP"
+fi
+selecta_log info "mpv up (pid=$MPV_PID socket=$SELECTA_MPV_SOCK)"
+selecta_state_write stopped
+
+# --- event handling ---------------------------------------------------------
+# Metadata for the current source that mpv cannot know: which station this is,
+# and how to find it again. bin/selecta writes it before issuing loadfile.
+sup_source() {
+	if [ -s "$SELECTA_RUN/source.json" ] &&
+		jq -e . "$SELECTA_RUN/source.json" >/dev/null 2>&1; then
+		cat "$SELECTA_RUN/source.json"
+	else
+		printf 'null'
+	fi
+}
+
+LAST_TRACK=''
+LAST_SOURCE=''
+LAST_REPO_KEY=''
+SOURCE_SINCE=0
+
+# Credits elapsed listening time to whichever source was playing. Called on
+# source change and on the way out, so a session that ends mid-track still
+# counts toward the repo's totals.
+# shellcheck disable=SC2329
+sup_bank_seconds() {
+	[ -n "$LAST_SOURCE" ] && [ -n "$LAST_REPO_KEY" ] && [ "$SOURCE_SINCE" -gt 0 ] || return 0
+	_bs=$(($(date +%s) - SOURCE_SINCE))
+	SOURCE_SINCE=0
+	selecta_st_add_seconds "$LAST_REPO_KEY" "$LAST_SOURCE" "$_bs" || true
+}
+
+sup_refresh() {
+	_r_status=$1
+	_r_meta=$(selecta_ipc_get metadata 2>/dev/null)
+	[ -n "$_r_meta" ] && [ "$_r_meta" != null ] || _r_meta='{}'
+
+	# Shoutcast streams put "Artist - Title" in icy-title; mpv also exposes
+	# artist and title separately when the stream provides them.
+	#
+	# icy-name is deliberately not consulted: it is the station description,
+	# which is already shown as the source, and using it as a track title
+	# would mean the status line always looks like something is playing.
+	_r_now=$(printf '%s' "$_r_meta" | jq -c '
+		def pick($keys): first((.[$keys[]] // empty) | select(. != "")) // "";
+		(pick(["icy-title"])) as $icy
+		| { artist: (pick(["artist","ARTIST","icy-artist"])),
+			title:  (pick(["title","TITLE"])) }
+		| if .artist == "" and .title == "" and $icy != "" then
+			(if ($icy | test(" - ")) then
+				{ artist: ($icy | split(" - ")[0]), title: ($icy | split(" - ")[1:] | join(" - ")) }
+			 else { artist: "", title: $icy } end)
+		  else . end' 2>/dev/null)
+	[ -n "$_r_now" ] || _r_now='{"artist":"","title":""}'
+
+	_r_src=$(sup_source)
+	# Repo identity comes from the client that started playback, not from the
+	# supervisor's own cwd, which is the session directory and unrelated.
+	_r_repo=$(printf '%s' "$_r_src" | jq -c '.repo // {}' 2>/dev/null)
+	[ -n "$_r_repo" ] || _r_repo='{}'
+	_r_vol=$(selecta_ipc_get volume 2>/dev/null)
+	case $_r_vol in '' | null) _r_vol=0 ;; esac
+	_r_extra=$(jq -n --argjson vol "${_r_vol%%.*}" --arg pid "$$" \
+		--argjson repo "$_r_repo" \
+		'{volume: $vol, pid: ($pid|tonumber), repo: $repo}')
+
+	selecta_state_write "$_r_status" "$_r_src" "$_r_now" "$_r_extra"
+
+	# Register the source on first play. This is what lazily creates the
+	# repo's soundtrack, so a repo only gets a file once it has actually
+	# been listened to.
+	_r_sid=$(printf '%s' "$_r_src" | jq -r '.id // ""')
+	if [ -n "$_r_sid" ] && [ "$_r_sid" != "$LAST_SOURCE" ] && [ "$_r_status" = playing ]; then
+		sup_bank_seconds
+		LAST_SOURCE=$_r_sid
+		LAST_REPO_KEY=$(printf '%s' "$_r_repo" | jq -r '.key // ""')
+		SOURCE_SINCE=$(date +%s)
+		selecta_st_touch_source "$_r_repo" "$(printf '%s' "$_r_src" | jq -c 'del(.repo)')" || true
+	fi
+
+	# Record the track once, on change, not on every event.
+	_r_key=$(printf '%s' "$_r_now" | jq -r '"\(.artist)|\(.title)"')
+	if [ "$_r_key" != "$LAST_TRACK" ] && [ "$_r_key" != "|" ] && [ "$_r_status" = playing ]; then
+		LAST_TRACK=$_r_key
+		selecta_st_record_track "$_r_src" "$_r_now" || true
+	fi
+}
+
+sup_watchdog() {
+	# Reparenting to init means the monitor that owned us died. In detached
+	# mode setsid deliberately reparents us at startup, so the check only
+	# applies when the host is supposed to be our parent.
+	if [ "$MODE" = monitor ]; then
+		[ "$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')" = 1 ] && return 1
+	fi
+	if [ -f "$SELECTA_HEARTBEAT" ]; then
+		_wd_age=$(($(date +%s) - $(selecta_file_mtime "$SELECTA_HEARTBEAT")))
+		[ "$_wd_age" -lt "$HEARTBEAT_LIMIT" ] || return 1
+	fi
+	kill -0 "$MPV_PID" 2>/dev/null || return 1
+	return 0
+}
+
+if [ "$ONCE" -eq 1 ]; then
+	# Test mode: prove the pipeline without holding the session open.
+	_once_url=${SELECTA_ONCE_URL:-}
+	if [ -n "$_once_url" ]; then
+		selecta_ipc_command "[\"loadfile\",\"$_once_url\"]" >/dev/null
+	fi
+	_i=0
+	while [ "$_i" -lt 30 ]; do
+		_i=$((_i + 1))
+		_idle=$(selecta_ipc_get core-idle 2>/dev/null)
+		if [ "$_idle" = false ]; then sup_refresh playing; else sup_refresh buffering; fi
+		sleep 0.5
+	done
+	exit 0
+fi
+
+# Persistent event connection. The fifo keeps nc's stdin open so mpv does not
+# see EOF and drop us; without it the connection closes immediately.
+FIFO=$SELECTA_RUN/events.fifo
+rm -f "$FIFO"
+mkfifo "$FIFO" 2>/dev/null || {
+	sup_fatal "cannot create $FIFO"
+	exit "$EX_UNWRITABLE"
+}
+# Opened read-write on purpose. Opening a fifo write-only blocks until a
+# reader attaches, and the reader here is the nc below, so write-only would
+# deadlock before the loop ever starts.
+exec 9<>"$FIFO"
+printf '%s\n' '{"command":["observe_property",1,"metadata"]}' >&9
+printf '%s\n' '{"command":["observe_property",2,"core-idle"]}' >&9
+printf '%s\n' '{"command":["observe_property",3,"pause"]}' >&9
+
+nc -U "$SELECTA_MPV_SOCK" <"$FIFO" 2>/dev/null | while IFS= read -r _line; do
+	case $_line in
+	*'"event"'*)
+		_ev=$(printf '%s' "$_line" | jq -r '.event // ""' 2>/dev/null)
+		case $_ev in
+		property-change | file-loaded | playback-restart)
+			_paused=$(selecta_ipc_get pause 2>/dev/null)
+			_idle=$(selecta_ipc_get core-idle 2>/dev/null)
+			if [ "$_paused" = true ]; then
+				sup_refresh paused
+			elif [ "$_idle" = true ]; then
+				sup_refresh buffering
+			else
+				sup_refresh playing
+			fi
+			;;
+		end-file | idle)
+			sup_refresh stopped
+			;;
+		esac
+		;;
+	esac
+	sup_watchdog || break
+done
+
+exit 0

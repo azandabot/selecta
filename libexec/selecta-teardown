@@ -1,0 +1,25 @@
+#!/bin/sh
+# Stops the player at session end.
+#
+# SessionEnd hooks share a 1.5 second budget, so this does exactly one thing:
+# signal the supervisor and return. No network, no jq, no cleanup work. The
+# supervisor's own trap does the tidying, and its watchdog is the real
+# guarantee, because SessionEnd is not fired on a kill -9 or a closed terminal.
+
+SELECTA_HOME=${SELECTA_HOME:-$HOME/.claude/selecta}
+_pidfile=$SELECTA_HOME/run/supervisor.pid
+
+[ -f "$_pidfile" ] || exit 0
+IFS= read -r _pid <"$_pidfile" 2>/dev/null || exit 0
+
+case ${_pid:-} in
+'' | *[!0-9]*) exit 0 ;;
+esac
+
+# PIDs get recycled. Confirming the command name before signalling keeps this
+# from killing an unrelated process that inherited the number.
+if ps -o command= -p "$_pid" 2>/dev/null | grep -q 'selecta-supervisor'; then
+	kill "$_pid" 2>/dev/null
+fi
+
+exit 0
