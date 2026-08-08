@@ -313,6 +313,34 @@ must never break your status line.
 `evals/` holds seven behavioural cases for the skill itself, led by
 `no-autostart`: music must never start unless you asked for it.
 
+## Developing
+
+`claude plugin install` from a directory source **copies** the plugin into
+`~/.claude/plugins/cache/<marketplace>/selecta/<version>/`. It does not
+reference your working tree. Editing the repo changes nothing about what
+`/selecta` runs, and the staleness is invisible: the command works, it is just
+running old code.
+
+While developing, test the repo directly:
+
+```bash
+./bin/selecta play ambient
+./tests/run.sh
+```
+
+To refresh the installed copy you must bump the version, or the update is a
+no-op:
+
+```bash
+# 1. bump "version" in .claude-plugin/plugin.json
+claude plugin marketplace update azandabot-selecta
+claude plugin update selecta@azandabot-selecta
+# 2. restart the session
+```
+
+`selecta doctor` prints the directory it is running from, so you can always
+tell which copy answered.
+
 ## Contributing
 
 Issues and pull requests welcome. `./tests/run.sh` and

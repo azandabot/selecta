@@ -111,4 +111,29 @@ t_eq "every mood references a real station" "true" \
 		| [$m|to_entries[]|.value.stations[]]|unique|all(. as $s | $ids|index($s) != null)' \
 		"$SELECTA_ROOT/data/mood-map.json" "$_seed")"
 
+# --- regression: substring matching scored nonsense highly -------------------
+# "Kwiish SA Technics" scored the station Bossa Beyond at 0.9, because the
+# two-letter token "sa" matched Bossa, bossanova, the id bossa and Samba in the
+# description, hitting all four fields at once. Text scoring is now whole-word
+# and ignores tokens under three characters.
+for _q in "Kwiish SA Technics" "Burna Boy Last Last" "Tyla Water" \
+	"Davido Unavailable" "Rottweiler Essdeekid"; do
+	_r=$(r "$_q")
+	t_eq "artist query \"$_q\" does not score confidently" "false" \
+		"$(field "$_r" '.confidence >= 0.7')"
+done
+
+_x=$(r "Kwiish SA Technics")
+t_eq "the exact reported case no longer matches Bossa Beyond" "none" "$(field "$_x" .status)"
+
+# Short tokens must not match inside longer words.
+_x=$(r "sa")
+t_eq "a bare two-letter token matches nothing by text" "0" \
+	"$(field "$_x" '[.candidates[] | select(.why == "text match")] | length')"
+
+# And the mood vocabulary must be untouched by the change.
+for _m in ambient metal jazz reggae "80s" drone lofi "secret agent" "groove salad" "deep work"; do
+	t_eq "mood \"$_m\" still resolves confidently" "ok" "$(field "$(r "$_m")" .status)"
+done
+
 rm -rf "$SELECTA_HOME"

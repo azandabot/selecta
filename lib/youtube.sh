@@ -126,8 +126,12 @@ selecta_yt_resolve() {
 			'{status:"nokey",confidence:0,query:$q,normalized:$q,hint_tags:[],candidates:[]}'
 		return 0
 	fi
-	_yr_c=$(selecta_yt_search "$_yr_q")
-	_yr_rc=$?
+	# The `|| _yr_rc=$?` is load-bearing. bin/selecta runs under `set -e`, where
+	# an assignment whose command substitution exits non-zero terminates the
+	# script on the spot: the next line never ran, and a search that simply
+	# found nothing killed the whole command with no output at all.
+	_yr_rc=0
+	_yr_c=$(selecta_yt_search "$_yr_q") || _yr_rc=$?
 	if [ "$_yr_rc" -eq 2 ]; then
 		jq -nc --arg q "$_yr_q" \
 			'{status:"quota",confidence:0,query:$q,normalized:$q,hint_tags:[],candidates:[]}'

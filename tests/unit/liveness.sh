@@ -140,3 +140,11 @@ t_eq "player page links the repo" "1" \
 	"$(grep -cF 'github.com/azandabot/selecta' "$SELECTA_ROOT/player/index.html")"
 t_eq "youtube attribution survives alongside it" "1" \
 	"$(grep -cF 'Music by YouTube' "$SELECTA_ROOT/player/index.html")"
+
+# --- version must not drift -------------------------------------------------
+# plugin.json's version is what gates `claude plugin update`. If the shell
+# constant disagrees, doctor reports a different version from the one actually
+# installed and a stale copy looks current.
+t_eq "shell version matches plugin.json" \
+	"$(jq -r .version "$SELECTA_ROOT/.claude-plugin/plugin.json")" \
+	"$(sed -n 's/^SELECTA_VERSION=//p' "$SELECTA_ROOT/lib/common.sh")"

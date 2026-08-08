@@ -20,6 +20,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck -x -s sh bin/selecta lib/*.sh libexec/* statusline/*.sh \
             tests/run.sh tests/lib.sh tests/unit/*.sh tests/integration/*.sh
+      - name: python compiles
+        # compile(), not ast.parse(): ast.parse accepts "name used prior to
+        # global declaration", which is a SyntaxError only at compile time.
+        # That exact bug shipped and broke every YouTube playback.
+        run: python3 -c "compile(open('libexec/selecta-httpd').read(), 'selecta-httpd', 'exec')"
+
       - name: json is well formed
         run: |
           sudo apt-get install -y -qq jq

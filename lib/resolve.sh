@@ -87,6 +87,14 @@ selecta_resolve() {
 		def moods: ($mood[0].moods // {});
 		def toks: ($q | split(" ") | map(select(length > 1)));
 
+		# Text scoring ignores tokens shorter than three characters. "sa" in
+		# "Kwiish SA" matched Bossa, bossanova, the id bossa and Samba in the
+		# description, hitting every field at once and scoring a station at
+		# 0.9 for an artist name it has nothing to do with. Short tokens are
+		# almost always initials or particles and carry no signal here; real
+		# short terms like "80s" are three characters and still count.
+		def textToks: (toks | map(select(length > 2)));
+
 		def card($c; $score; $why):
 			{ id: ("somafm:" + $c.id),
 			  kind: "station",
@@ -121,18 +129,21 @@ selecta_resolve() {
 		# Normalised so that matching a title or genre outright scores 1.0 per
 		# token; description alone is a weak signal and stays well under the
 		# confidence threshold on its own.
+		# Whole-word matching, not substring. `contains` made every token a
+		# wildcard against the middle of unrelated words.
 		| ( [ chans[]
 			  | . as $c
-			  | ( [ toks[] as $t
-					| ( if ($c.title | ascii_downcase | contains($t)) then 3 else 0 end )
-					+ ( if (($c.genre // "") | ascii_downcase | contains($t)) then 3 else 0 end )
-					+ ( if ($c.id | ascii_downcase | contains($t)) then 2 else 0 end )
-					+ ( if (($c.description // "") | ascii_downcase | contains($t)) then 1 else 0 end )
+			  | ( [ textToks[] as $t
+					| ("\\b" + $t + "\\b") as $re
+					| ( if ($c.title | ascii_downcase | test($re)) then 3 else 0 end )
+					+ ( if (($c.genre // "") | ascii_downcase | test($re)) then 3 else 0 end )
+					+ ( if ($c.id | ascii_downcase | test($re)) then 2 else 0 end )
+					+ ( if (($c.description // "") | ascii_downcase | test($re)) then 1 else 0 end )
 				  ] | add // 0 ) as $raw
 			  # Capped below the curated mood scores so that a hand-picked
 			  # station outranks an incidental genre-string match.
-			  | ( if (toks | length) == 0 then 0
-				  else ([ $raw / ((toks | length) * 3), 0.9 ] | min) end ) as $norm
+			  | ( if (textToks | length) == 0 then 0
+				  else ([ $raw / ((textToks | length) * 3), 0.9 ] | min) end ) as $norm
 			  | select($norm > 0)
 			  | card($c; $norm; "text match") ] ) as $textcards
 

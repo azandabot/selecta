@@ -586,7 +586,11 @@ cmd_statusline() {
 
 cmd_doctor() {
 	_cd_fail=0
-	printf 'selecta %s\n\n' "$SELECTA_VERSION"
+	printf 'selecta %s\n' "$SELECTA_VERSION"
+	# The running location is printed because `plugin install` copies the
+	# plugin rather than referencing it. A stale snapshot is otherwise
+	# invisible and looks like the code simply not working.
+	printf 'running from %s\n\n' "$SELECTA_ROOT"
 
 	for _cd_t in jq curl git; do
 		if selecta_have "$_cd_t"; then
