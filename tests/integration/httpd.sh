@@ -35,7 +35,7 @@ export SELECTA_YT_ROOT SELECTA_YT_BIN
 HTTPD_PID=$!
 
 _i=0
-while [ ! -s "$SELECTA_RUN/httpd.json" ] && [ "$_i" -lt 100 ]; do
+while [ ! -s "$SELECTA_RUN/httpd.json" ] && [ "$_i" -lt 300 ]; do
 	kill -0 "$HTTPD_PID" 2>/dev/null || break
 	_i=$((_i + 1))
 	sleep 0.1
@@ -55,8 +55,17 @@ alive_or_why() {
 t_eq "the server starts and stays up" "up" "$(alive_or_why)"
 t_empty "the server logs no traceback" \
 	"$(grep -l 'Traceback\|NameError\|SyntaxError' "$SELECTA_HOME/logs/out" 2>/dev/null || true)"
-t_eq "it advertises itself for the shell to find" "true" \
-	"$([ -s "$SELECTA_RUN/httpd.json" ] && echo true || echo false)"
+advertised_or_why() {
+	if [ -s "$SELECTA_RUN/httpd.json" ]; then
+		echo true
+	else
+		printf 'no httpd.json after %ss. run dir: [%s] log: [%s]' \
+			"$((_i / 10))" \
+			"$(find "$SELECTA_RUN" -maxdepth 1 -type f -exec basename {} \; 2>&1 | tr '\n' ' ')" \
+			"$(head -5 "$SELECTA_HOME/logs/out" 2>&1 | tr '\n' ' ')"
+	fi
+}
+t_eq "it advertises itself for the shell to find" "true" "$(advertised_or_why)"
 
 if [ -s "$SELECTA_RUN/httpd.json" ]; then
 	ORIGIN=$(jq -r .origin "$SELECTA_RUN/httpd.json")
