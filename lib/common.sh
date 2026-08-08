@@ -36,6 +36,7 @@ EX_UNWRITABLE=3
 EX_MISSING_DEP=4
 EX_NETWORK=5
 EX_NOTFOUND=6
+EX_NEEDS_CONSENT=7
 
 # --- output -----------------------------------------------------------------
 # Diagnostics go to stderr so stdout stays parseable. The supervisor redirects
@@ -67,6 +68,27 @@ selecta_rotate_log() {
 	size=$(selecta_file_size "$SELECTA_LOGFILE")
 	[ "$size" -gt "$SELECTA_LOG_MAX_BYTES" ] 2>/dev/null || return 0
 	mv -f "$SELECTA_LOGFILE" "$SELECTA_LOGFILE.1" 2>/dev/null || true
+}
+
+# --- consent ---------------------------------------------------------------
+
+# selecta_confirm <expected-answer> <prompt> <how-to-confirm>
+#
+# The Bash tool has no TTY. `read` there hits EOF immediately and, under
+# `set -e`, killed the script mid-command: `statusline on` could never succeed
+# through an agent, and printed a question nobody could answer. With no TTY we
+# say how to confirm instead and return EX_NEEDS_CONSENT, which is a state, not
+# a failure.
+selecta_confirm() {
+	if [ -t 0 ]; then
+		printf '%s' "$2"
+		read -r _cf_ans || _cf_ans=''
+		[ "$_cf_ans" = "$1" ] && return 0
+		printf 'Not confirmed, nothing changed.\n'
+		return "$EX_NEEDS_CONSENT"
+	fi
+	printf '\nNothing has been changed. To do it after the user agrees:\n\n  %s\n' "$3" >&2
+	return "$EX_NEEDS_CONSENT"
 }
 
 # --- portability ------------------------------------------------------------

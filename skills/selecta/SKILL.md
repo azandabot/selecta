@@ -133,14 +133,19 @@ written into the user's repository.**
 ## Status line
 
 `selecta statusline on` shows the current track in the status line. It edits the
-user's global `~/.claude/settings.json`, so it prints the exact JSON, discloses
-that a status line hides most built-in footer key hints, backs the file up, and
-asks before writing.
+user's global `~/.claude/settings.json`, so consent happens in the conversation:
 
-**Run it only when the user asks for it, and let it ask its own question — do
-not answer on their behalf.** If it reports the settings file is `jsonc`,
-`unparseable` or `readonly`, it deliberately refuses and prints a block to paste
-manually. Relay that; it is the correct outcome, not a failure.
+1. Run `selecta statusline on`. It writes nothing. **Exit 7 is the expected,
+   correct result**, not an error.
+2. Show the user its output verbatim: the JSON block and both disclosures.
+3. Ask, in your own message, whether to add it.
+4. **Stop and wait for their answer.**
+5. Only if they say yes: `selecta statusline on --user-confirmed`.
+
+Never pass `--user-confirmed` on the first call. Never edit `settings.json` with
+Write, Edit or a shell redirect. Exit 3 means selecta refused (`jsonc`,
+`unparseable`, `readonly`) — relay the paste block; that is correct, not a
+failure.
 
 `selecta statusline off` reverses it and restores any pre-existing status line.
 

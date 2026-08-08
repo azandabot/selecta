@@ -617,12 +617,12 @@ cmd_curate() {
 		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
 
 	if [ "$_cu_action" = forget ] && [ "$_cu_target" = all ]; then
-		printf 'This deletes the whole crate for this repo. Type the repo name to confirm: '
-		read -r _cu_confirm
-		[ "$_cu_confirm" = "$(printf '%s' "$_cu_doc" | jq -r .display_name)" ] || {
-			printf 'Not confirmed, nothing changed.\n'
-			return 0
-		}
+		_cu_name=$(printf '%s' "$_cu_doc" | jq -r .display_name)
+		if [ "${3:-}" != "--confirm" ] || [ "${4:-}" != "$_cu_name" ]; then
+			printf 'This deletes the whole crate for this repo.\n'
+			selecta_confirm "$_cu_name" "Type the repo name to confirm: " \
+				"selecta forget all --confirm $_cu_name" || return $?
+		fi
 		rm -f "$(selecta_st_file_for "$_cu_key")"
 		printf 'Crate deleted.\n'
 		return 0
@@ -665,6 +665,8 @@ cmd_statusline() {
 			"$(selecta_cfg_get '.statusline.installed' false)"
 		;;
 	on)
+		_sl_yes=0
+		[ "${2:-}" = --user-confirmed ] && _sl_yes=1
 		_sl_state=$(selecta_sl_detect)
 		case $_sl_state in
 		jsonc | unparseable | readonly)
@@ -682,15 +684,9 @@ cmd_statusline() {
 		[ "$_sl_state" = foreign ] &&
 			printf '  • You already have a status line. Yours stays, and runs first.\n'
 		printf '\nA backup is written before any change. Undo with: selecta statusline off\n'
-		printf '\nAdd it? [y/N] '
-		read -r _sl_yes
-		case $_sl_yes in
-		y | Y | yes | YES) ;;
-		*)
-			printf 'Nothing changed.\n'
-			return 0
-			;;
-		esac
+		if [ "$_sl_yes" -ne 1 ]; then
+			selecta_confirm y 'Add it? [y/N] ' 'selecta statusline on --user-confirmed' || return $?
+		fi
 		_sl_mode=$(selecta_sl_install) || selecta_die "$EX_UNWRITABLE" "could not write settings"
 		printf 'Installed (%s mode). Restart or open a new session to see it.\n' "$_sl_mode"
 		;;
@@ -731,6 +727,11 @@ cmd_doctor() {
 	if [ "$_cd_fail" -eq 1 ]; then
 		printf '\nInstall what is missing:\n\n  %s\n\n' "$(selecta_install_hint 'mpv jq')"
 		printf 'selecta will not run that for you. Copy it if it looks right.\n'
+	fi
+
+	if ! selecta_have jq; then
+		printf '\n  Everything below needs jq. Install it and run doctor again.\n'
+		exit "$EX_MISSING_DEP"
 	fi
 
 	selecta_ensure_dirs 2>/dev/null || true
@@ -800,12 +801,11 @@ cmd_uninstall() {
 	selecta_sl_uninstall 2>/dev/null || true
 	selecta_ipc_command '["quit"]' >/dev/null 2>&1 || true
 	if [ "${1:-}" = --purge ]; then
-		printf 'This deletes every crate for every repo. Type PURGE to confirm: '
-		read -r _cu_c
-		[ "$_cu_c" = PURGE ] || {
-			printf 'Not confirmed. Status line removed, data kept.\n'
-			return 0
-		}
+		if [ "${2:-}" != "--confirm" ] || [ "${3:-}" != PURGE ]; then
+			printf 'This deletes every crate for every repo.\n'
+			selecta_confirm PURGE 'Type PURGE to confirm: ' \
+				'selecta uninstall --purge --confirm PURGE' || return $?
+		fi
 		rm -rf "$SELECTA_HOME"
 		printf 'Removed %s\n' "$SELECTA_HOME"
 	else
@@ -984,6 +984,19 @@ main() {
 
 	cmd=$(canonicalize "$1")
 	shift
+
+	# jq underpins resolution, state and the crate. Without it every path dies
+	# mid-command with a bare "command not found"; say so once instead.
+	case $cmd in
+	doctor) ;;
+	*)
+		if ! selecta_have jq; then
+			printf 'selecta: jq is required.\n\n  %s\n\nThen: selecta doctor\n' \
+				"$(selecta_install_hint 'jq mpv')" >&2
+			exit "$EX_MISSING_DEP"
+		fi
+		;;
+	esac
 
 	case $cmd in
 	'' | status) cmd_status ;;
