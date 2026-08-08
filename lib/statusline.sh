@@ -30,7 +30,8 @@ selecta_sl_settings_path() {
 	printf '%s' "$_sp"
 }
 
-# missing | empty | absent | ours | foreign | jsonc | unparseable | readonly
+# missing | empty | absent | ours | ours-elsewhere | foreign | jsonc |
+# unparseable | readonly | nojq
 selecta_sl_detect() {
 	_sd=$(selecta_sl_settings_path)
 
@@ -44,6 +45,12 @@ selecta_sl_detect() {
 	}
 	if [ ! -w "$_sd" ]; then
 		printf 'readonly'
+		return 0
+	fi
+	# Merging settings needs jq. Without it we refuse and print the block
+	# rather than rewriting someone's global config with sed.
+	if ! selecta_have jq; then
+		printf 'nojq'
 		return 0
 	fi
 	if ! jq -e . "$_sd" >/dev/null 2>&1; then
@@ -142,7 +149,7 @@ selecta_sl_write() {
 selecta_sl_install() {
 	_si_state=$(selecta_sl_detect)
 	case $_si_state in
-	jsonc | unparseable | readonly) return 1 ;;
+	jsonc | unparseable | readonly | nojq) return 1 ;;
 	esac
 
 	selecta_sl_install_script || return "$EX_UNWRITABLE"

@@ -49,6 +49,15 @@ export SELECTA_ROOT
 # shellcheck source=lib/statusline.sh
 . "$SELECTA_ROOT/lib/statusline.sh"
 
+# Plugins install under a versioned cache path that changes on every update,
+# so the status line launcher cannot hardcode a way back to us. These two
+# pointers are refreshed on every run and self-heal after an update.
+_selecta_write_pointers() {
+	mkdir -p "$SELECTA_HOME" 2>/dev/null || return 0
+	printf '%s\n' "$SELECTA_ROOT" >"$SELECTA_HOME/root" 2>/dev/null || true
+	printf '%s\n' "$SELECTA_BIN" >"$SELECTA_HOME/bin-path" 2>/dev/null || true
+}
+
 usage() {
 	cat <<'EOF'
 selecta - background music for your coding sessions
@@ -673,7 +682,7 @@ cmd_statusline() {
 		[ "${2:-}" = --user-confirmed ] && _sl_yes=1
 		_sl_state=$(selecta_sl_detect)
 		case $_sl_state in
-		jsonc | unparseable | readonly)
+		jsonc | unparseable | readonly | nojq)
 			printf 'selecta: %s is %s, so it will not be edited automatically.\n\n' \
 				"$(selecta_sl_settings_path)" "$_sl_state" >&2
 			printf 'Add this yourself:\n\n%s\n' "$(selecta_sl_preview)" >&2
@@ -993,6 +1002,8 @@ main() {
 		exit 0
 		;;
 	esac
+
+	_selecta_write_pointers
 
 	cmd=$(canonicalize "$1")
 	shift

@@ -42,6 +42,23 @@ if [ -s "$_wrapped" ] && [ -z "${SELECTA_SL_NESTED:-}" ]; then
 	fi
 fi
 
+# Nothing is polling, so nothing will ever write the segment. Start the
+# supervisor and let the next refresh pick it up. kill -0 and read are
+# builtins: the common path where it is already running forks nothing.
+_pid=''
+[ -r "$SELECTA_HOME/run/supervisor.pid" ] &&
+	IFS= read -r _pid <"$SELECTA_HOME/run/supervisor.pid" 2>/dev/null
+case ${_pid:-} in
+'' | *[!0-9]*) _pid='' ;;
+esac
+if [ -z "${_pid:-}" ] || ! kill -0 "$_pid" 2>/dev/null; then
+	_root=''
+	[ -r "$SELECTA_HOME/root" ] && IFS= read -r _root <"$SELECTA_HOME/root" 2>/dev/null
+	if [ -n "${_root:-}" ] && [ -x "$_root/libexec/selecta-supervisor" ]; then
+		"$_root/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
+	fi
+fi
+
 [ -s "$_seg" ] || exit 0
 
 {
