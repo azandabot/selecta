@@ -151,6 +151,14 @@ selecta_resolve_net() {
 	_rn_q=$1
 	_rn_tags=${2:-$1}
 
+	# --offline has to mean offline. It previously gated only the SomaFM
+	# catalog refresh, so tests and offline use still hit three providers.
+	if [ "${SELECTA_OFFLINE:-0}" = 1 ]; then
+		jq -nc --arg q "$_rn_q" \
+			'{status:"none",confidence:0,query:$q,normalized:$q,hint_tags:[],candidates:[]}'
+		return 0
+	fi
+
 	_rn_ck="net:$_rn_q:$_rn_tags"
 	if _rn_hit=$(_rn_cached "$_rn_ck"); then
 		printf '%s' "$_rn_hit"

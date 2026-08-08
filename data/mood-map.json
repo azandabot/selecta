@@ -2,130 +2,1164 @@
   "schema": 1,
   "_comment": "Mood and genre vocabulary. 'stations' are SomaFM channel ids resolved with zero network calls beyond the catalog. 'tags' are radio-browser search tags, used when SomaFM has nothing close. A mood with tags but no stations is a deliberate admission that SomaFM does not cover it.",
   "moods": {
-    "focus":        { "stations": ["groovesalad", "dronezone", "missioncontrol"], "tags": ["ambient", "chillout"] },
-    "deep work":    { "stations": ["dronezone", "deepspaceone", "synphaera"], "tags": ["ambient", "drone"] },
-    "concentrate":  { "stations": ["groovesalad", "dronezone"], "tags": ["ambient"] },
-    "coding":       { "stations": ["groovesalad", "defcon", "cliqhop"], "tags": ["electronic", "chillout"] },
-    "debugging":    { "stations": ["dronezone", "deepspaceone"], "tags": ["ambient"] },
-    "writing":      { "stations": ["groovesalad", "lush", "synphaera"], "tags": ["ambient", "downtempo"] },
-    "reading":      { "stations": ["dronezone", "synphaera", "bossa"], "tags": ["ambient", "jazz"] },
-    "flow":         { "stations": ["groovesalad", "thetrip"], "tags": ["downtempo"] },
-    "shipping":     { "stations": ["defcon", "beatblender", "thetrip"], "tags": ["electronic"] },
-    "hacking":      { "stations": ["defcon", "cliqhop", "vaporwaves"], "tags": ["electronic", "idm"] },
-
-    "chill":        { "stations": ["groovesalad", "chillits", "lush"], "tags": ["chillout"] },
-    "relax":        { "stations": ["groovesalad", "dronezone", "bossa"], "tags": ["chillout", "ambient"] },
-    "calm":         { "stations": ["dronezone", "synphaera", "deepspaceone"], "tags": ["ambient"] },
-    "mellow":       { "stations": ["lush", "bossa", "illstreet"], "tags": ["lounge", "downtempo"] },
-    "cozy":         { "stations": ["illstreet", "bossa", "secretagent"], "tags": ["lounge", "jazz"] },
-    "warm":         { "stations": ["7soul", "bossa", "insound"], "tags": ["soul", "lounge"] },
-    "dreamy":       { "stations": ["lush", "synphaera", "deepspaceone"], "tags": ["dream pop", "ambient"] },
-    "sleep":        { "stations": ["dronezone", "deepspaceone", "synphaera"], "tags": ["sleep", "ambient"] },
-
-    "energetic":    { "stations": ["beatblender", "dubstep", "poptron"], "tags": ["dance", "electronic"] },
-    "hype":         { "stations": ["dubstep", "beatblender", "defcon"], "tags": ["dance", "bass"] },
-    "upbeat":       { "stations": ["poptron", "indiepop", "insound"], "tags": ["pop", "indie"] },
-    "party":        { "stations": ["beatblender", "poptron", "reggae"], "tags": ["dance", "party"] },
-    "workout":      { "stations": ["beatblender", "dubstep", "metal"], "tags": ["workout", "electronic"] },
-    "gym":          { "stations": ["dubstep", "metal", "beatblender"], "tags": ["workout"] },
-    "running":      { "stations": ["beatblender", "thetrip"], "tags": ["electronic", "dance"] },
-    "aggressive":   { "stations": ["metal", "doomed", "dubstep"], "tags": ["metal", "hardcore"] },
-    "angry":        { "stations": ["metal", "doomed"], "tags": ["metal"] },
-
-    "dark":         { "stations": ["doomed", "darkzone", "deepspaceone"], "tags": ["dark ambient", "industrial"] },
-    "moody":        { "stations": ["darkzone", "thetrip", "doomed"], "tags": ["dark ambient", "trip hop"] },
-    "melancholy":   { "stations": ["darkzone", "lush", "n5md"], "tags": ["ambient", "post rock"] },
-    "sad":          { "stations": ["darkzone", "lush"], "tags": ["ambient", "sad"] },
-    "eerie":        { "stations": ["doomed", "darkzone", "sf1033"], "tags": ["dark ambient"] },
-    "creepy":       { "stations": ["doomed", "darkzone"], "tags": ["dark ambient", "horror"] },
-    "weird":        { "stations": ["cliqhop", "vaporwaves", "brfm"], "tags": ["experimental", "idm"] },
-    "experimental": { "stations": ["cliqhop", "n5md", "brfm"], "tags": ["experimental", "avant-garde"] },
-
-    "space":        { "stations": ["deepspaceone", "spacestation", "synphaera"], "tags": ["space ambient", "ambient"] },
-    "spacey":       { "stations": ["deepspaceone", "spacestation"], "tags": ["space ambient"] },
-    "cyberpunk":    { "stations": ["defcon", "vaporwaves", "cliqhop"], "tags": ["synthwave", "cyberpunk"] },
-    "retro":        { "stations": ["u80s", "seventies", "vaporwaves"], "tags": ["retro", "80s"] },
-    "nostalgic":    { "stations": ["seventies", "u80s", "insound"], "tags": ["oldies", "80s"] },
-    "night":        { "stations": ["thetrip", "darkzone", "secretagent"], "tags": ["downtempo", "trip hop"] },
-    "rain":         { "stations": ["dronezone", "lush"], "tags": ["ambient", "rain"] },
-    "driving":      { "stations": ["thetrip", "u80s", "beatblender"], "tags": ["synthwave", "electronic"] },
-
-    "ambient":      { "stations": ["dronezone", "deepspaceone", "synphaera"], "tags": ["ambient"] },
-    "drone":        { "stations": ["dronezone", "dz2", "darkzone"], "tags": ["drone"] },
-    "electronic":   { "stations": ["beatblender", "lush", "spacestation"], "tags": ["electronic"] },
-    "idm":          { "stations": ["cliqhop", "n5md"], "tags": ["idm"] },
-    "downtempo":    { "stations": ["groovesalad", "thetrip", "lush"], "tags": ["downtempo"] },
-    "trip hop":     { "stations": ["thetrip", "fluid"], "tags": ["trip hop"] },
-    "lofi":         { "stations": ["groovesalad", "fluid"], "tags": ["lofi", "lo-fi"] },
-    "lo-fi":        { "stations": ["groovesalad", "fluid"], "tags": ["lofi", "lo-fi"] },
-    "dubstep":      { "stations": ["dubstep"], "tags": ["dubstep"] },
-    "dnb":          { "stations": ["dubstep", "beatblender"], "tags": ["drum and bass"] },
-    "drum and bass":{ "stations": ["dubstep", "beatblender"], "tags": ["drum and bass"] },
-    "techno":       { "stations": ["beatblender", "spacestation"], "tags": ["techno"] },
-    "trance":       { "stations": ["suburbsofgoa", "spacestation"], "tags": ["trance"] },
-    "psytrance":    { "stations": ["suburbsofgoa"], "tags": ["psytrance", "goa"] },
-    "goa":          { "stations": ["suburbsofgoa"], "tags": ["goa"] },
-    "synthwave":    { "stations": ["u80s", "vaporwaves"], "tags": ["synthwave"] },
-    "vaporwave":    { "stations": ["vaporwaves"], "tags": ["vaporwave"] },
-    "chiptune":     { "stations": ["defcon", "cliqhop"], "tags": ["chiptune", "8bit"] },
-    "industrial":   { "stations": ["doomed"], "tags": ["industrial"] },
-
-    "jazz":         { "stations": ["sonicuniverse", "secretagent"], "tags": ["jazz"] },
-    "soul":         { "stations": ["7soul", "fluid"], "tags": ["soul"] },
-    "funk":         { "stations": ["7soul", "fluid"], "tags": ["funk"] },
-    "blues":        { "stations": ["bootliquor", "7soul"], "tags": ["blues"] },
-    "hiphop":       { "stations": ["fluid"], "tags": ["hip hop"] },
-    "hip hop":      { "stations": ["fluid"], "tags": ["hip hop"] },
-    "rap":          { "stations": ["fluid"], "tags": ["rap", "hip hop"] },
-    "lounge":       { "stations": ["illstreet", "secretagent"], "tags": ["lounge", "easy listening"] },
-    "exotica":      { "stations": ["tikitime", "illstreet"], "tags": ["exotica"] },
-    "tiki":         { "stations": ["tikitime"], "tags": ["exotica", "tiki"] },
-    "bossa nova":   { "stations": ["bossa"], "tags": ["bossa nova"] },
-    "bossanova":    { "stations": ["bossa"], "tags": ["bossa nova"] },
-    "samba":        { "stations": ["bossa"], "tags": ["samba", "brazilian"] },
-    "latin":        { "stations": ["bossa"], "tags": ["latin"] },
-
-    "rock":         { "stations": ["indiepop", "seventies", "poptron"], "tags": ["rock"] },
-    "indie":        { "stations": ["indiepop", "poptron"], "tags": ["indie"] },
-    "alternative":  { "stations": ["indiepop", "digitalis", "poptron"], "tags": ["alternative"] },
-    "punk":         { "stations": ["indiepop", "metal"], "tags": ["punk"] },
-    "metal":        { "stations": ["metal"], "tags": ["metal"] },
-    "pop":          { "stations": ["poptron", "insound"], "tags": ["pop"] },
-    "folk":         { "stations": ["folkfwd", "thistle"], "tags": ["folk"] },
-    "americana":    { "stations": ["bootliquor", "folkfwd"], "tags": ["americana", "country"] },
-    "country":      { "stations": ["bootliquor"], "tags": ["country"] },
-    "bluegrass":    { "stations": ["bootliquor"], "tags": ["bluegrass"] },
-    "celtic":       { "stations": ["thistle"], "tags": ["celtic"] },
-    "world":        { "stations": ["thistle", "suburbsofgoa", "bossa"], "tags": ["world"] },
-    "reggae":       { "stations": ["reggae"], "tags": ["reggae"] },
-    "dub":          { "stations": ["reggae", "dubstep"], "tags": ["dub"] },
-    "oldies":       { "stations": ["7soul", "insound"], "tags": ["oldies"] },
-    "70s":          { "stations": ["seventies"], "tags": ["70s"] },
-    "80s":          { "stations": ["u80s"], "tags": ["80s"] },
-    "covers":       { "stations": ["covers"], "tags": ["covers"] },
-    "spoken":       { "stations": ["sfinsf", "sf1033"], "tags": ["talk", "spoken word"] },
-    "news":         { "stations": ["sf1033", "scanner"], "tags": ["news"] },
-
-    "amapiano":     { "stations": [], "tags": ["amapiano", "afro house", "deep house"] },
-    "log drum":     { "stations": [], "tags": ["amapiano", "afro house"] },
-    "yanos":        { "stations": [], "tags": ["amapiano"] },
-    "afrobeats":    { "stations": [], "tags": ["afrobeats", "afropop"] },
-    "afro house":   { "stations": [], "tags": ["afro house", "deep house"] },
-    "afrobeat":     { "stations": [], "tags": ["afrobeat", "afrojazz"] },
-    "gqom":         { "stations": [], "tags": ["gqom", "south africa"] },
-    "kwaito":       { "stations": [], "tags": ["kwaito", "south africa"] },
-    "house":        { "stations": ["beatblender"], "tags": ["house", "deep house"] },
-    "deep house":   { "stations": ["beatblender"], "tags": ["deep house"] },
-    "garage":       { "stations": ["dubstep"], "tags": ["uk garage", "garage"] },
-    "dancehall":    { "stations": ["reggae"], "tags": ["dancehall"] },
-    "soca":         { "stations": [], "tags": ["soca", "caribbean"] },
-    "highlife":     { "stations": [], "tags": ["highlife", "african"] },
-    "classical":    { "stations": [], "tags": ["classical"] },
-    "opera":        { "stations": [], "tags": ["opera", "classical"] },
-    "piano":        { "stations": [], "tags": ["piano", "classical"] },
-    "gospel":       { "stations": [], "tags": ["gospel"] },
-    "ska":          { "stations": ["reggae"], "tags": ["ska"] },
-    "k-pop":        { "stations": [], "tags": ["kpop"] },
-    "anime":        { "stations": [], "tags": ["anime", "j-pop"] }
+    "focus": {
+      "stations": [
+        "groovesalad",
+        "dronezone",
+        "missioncontrol"
+      ],
+      "tags": [
+        "ambient",
+        "chillout"
+      ]
+    },
+    "deep work": {
+      "stations": [
+        "dronezone",
+        "deepspaceone",
+        "synphaera"
+      ],
+      "tags": [
+        "ambient",
+        "drone"
+      ]
+    },
+    "concentrate": {
+      "stations": [
+        "groovesalad",
+        "dronezone"
+      ],
+      "tags": [
+        "ambient"
+      ]
+    },
+    "coding": {
+      "stations": [
+        "groovesalad",
+        "defcon",
+        "cliqhop"
+      ],
+      "tags": [
+        "electronic",
+        "chillout"
+      ]
+    },
+    "debugging": {
+      "stations": [
+        "dronezone",
+        "deepspaceone"
+      ],
+      "tags": [
+        "ambient"
+      ]
+    },
+    "writing": {
+      "stations": [
+        "groovesalad",
+        "lush",
+        "synphaera"
+      ],
+      "tags": [
+        "ambient",
+        "downtempo"
+      ]
+    },
+    "reading": {
+      "stations": [
+        "dronezone",
+        "synphaera",
+        "bossa"
+      ],
+      "tags": [
+        "ambient",
+        "jazz"
+      ]
+    },
+    "flow": {
+      "stations": [
+        "groovesalad",
+        "thetrip"
+      ],
+      "tags": [
+        "downtempo"
+      ]
+    },
+    "shipping": {
+      "stations": [
+        "defcon",
+        "beatblender",
+        "thetrip"
+      ],
+      "tags": [
+        "electronic"
+      ]
+    },
+    "hacking": {
+      "stations": [
+        "defcon",
+        "cliqhop",
+        "vaporwaves"
+      ],
+      "tags": [
+        "electronic",
+        "idm"
+      ]
+    },
+    "chill": {
+      "stations": [
+        "groovesalad",
+        "chillits",
+        "lush"
+      ],
+      "tags": [
+        "chillout"
+      ]
+    },
+    "relax": {
+      "stations": [
+        "groovesalad",
+        "dronezone",
+        "bossa"
+      ],
+      "tags": [
+        "chillout",
+        "ambient"
+      ]
+    },
+    "calm": {
+      "stations": [
+        "dronezone",
+        "synphaera",
+        "deepspaceone"
+      ],
+      "tags": [
+        "ambient"
+      ]
+    },
+    "mellow": {
+      "stations": [
+        "lush",
+        "bossa",
+        "illstreet"
+      ],
+      "tags": [
+        "lounge",
+        "downtempo"
+      ]
+    },
+    "cozy": {
+      "stations": [
+        "illstreet",
+        "bossa",
+        "secretagent"
+      ],
+      "tags": [
+        "lounge",
+        "jazz"
+      ]
+    },
+    "warm": {
+      "stations": [
+        "7soul",
+        "bossa",
+        "insound"
+      ],
+      "tags": [
+        "soul",
+        "lounge"
+      ]
+    },
+    "dreamy": {
+      "stations": [
+        "lush",
+        "synphaera",
+        "deepspaceone"
+      ],
+      "tags": [
+        "dream pop",
+        "ambient"
+      ]
+    },
+    "sleep": {
+      "stations": [
+        "dronezone",
+        "deepspaceone",
+        "synphaera"
+      ],
+      "tags": [
+        "sleep",
+        "ambient"
+      ]
+    },
+    "energetic": {
+      "stations": [
+        "beatblender",
+        "dubstep",
+        "poptron"
+      ],
+      "tags": [
+        "dance",
+        "electronic"
+      ]
+    },
+    "hype": {
+      "stations": [
+        "dubstep",
+        "beatblender",
+        "defcon"
+      ],
+      "tags": [
+        "dance",
+        "bass"
+      ]
+    },
+    "upbeat": {
+      "stations": [
+        "poptron",
+        "indiepop",
+        "insound"
+      ],
+      "tags": [
+        "pop",
+        "indie"
+      ]
+    },
+    "party": {
+      "stations": [
+        "beatblender",
+        "poptron",
+        "reggae"
+      ],
+      "tags": [
+        "dance",
+        "party"
+      ]
+    },
+    "workout": {
+      "stations": [
+        "beatblender",
+        "dubstep",
+        "metal"
+      ],
+      "tags": [
+        "workout",
+        "electronic"
+      ]
+    },
+    "gym": {
+      "stations": [
+        "dubstep",
+        "metal",
+        "beatblender"
+      ],
+      "tags": [
+        "workout"
+      ]
+    },
+    "running": {
+      "stations": [
+        "beatblender",
+        "thetrip"
+      ],
+      "tags": [
+        "electronic",
+        "dance"
+      ]
+    },
+    "aggressive": {
+      "stations": [
+        "metal",
+        "doomed",
+        "dubstep"
+      ],
+      "tags": [
+        "metal",
+        "hardcore"
+      ]
+    },
+    "angry": {
+      "stations": [
+        "metal",
+        "doomed"
+      ],
+      "tags": [
+        "metal"
+      ]
+    },
+    "dark": {
+      "stations": [
+        "doomed",
+        "darkzone",
+        "deepspaceone"
+      ],
+      "tags": [
+        "dark ambient",
+        "industrial"
+      ]
+    },
+    "moody": {
+      "stations": [
+        "darkzone",
+        "thetrip",
+        "doomed"
+      ],
+      "tags": [
+        "dark ambient",
+        "trip hop"
+      ]
+    },
+    "melancholy": {
+      "stations": [
+        "darkzone",
+        "lush",
+        "n5md"
+      ],
+      "tags": [
+        "ambient",
+        "post rock"
+      ]
+    },
+    "sad": {
+      "stations": [
+        "darkzone",
+        "lush"
+      ],
+      "tags": [
+        "ambient",
+        "sad"
+      ]
+    },
+    "eerie": {
+      "stations": [
+        "doomed",
+        "darkzone",
+        "sf1033"
+      ],
+      "tags": [
+        "dark ambient"
+      ]
+    },
+    "creepy": {
+      "stations": [
+        "doomed",
+        "darkzone"
+      ],
+      "tags": [
+        "dark ambient",
+        "horror"
+      ]
+    },
+    "weird": {
+      "stations": [
+        "cliqhop",
+        "vaporwaves",
+        "brfm"
+      ],
+      "tags": [
+        "experimental",
+        "idm"
+      ]
+    },
+    "experimental": {
+      "stations": [
+        "cliqhop",
+        "n5md",
+        "brfm"
+      ],
+      "tags": [
+        "experimental",
+        "avant-garde"
+      ]
+    },
+    "space": {
+      "stations": [
+        "deepspaceone",
+        "spacestation",
+        "synphaera"
+      ],
+      "tags": [
+        "space ambient",
+        "ambient"
+      ]
+    },
+    "spacey": {
+      "stations": [
+        "deepspaceone",
+        "spacestation"
+      ],
+      "tags": [
+        "space ambient"
+      ]
+    },
+    "cyberpunk": {
+      "stations": [
+        "defcon",
+        "vaporwaves",
+        "cliqhop"
+      ],
+      "tags": [
+        "synthwave",
+        "cyberpunk"
+      ]
+    },
+    "retro": {
+      "stations": [
+        "u80s",
+        "seventies",
+        "vaporwaves"
+      ],
+      "tags": [
+        "retro",
+        "80s"
+      ]
+    },
+    "nostalgic": {
+      "stations": [
+        "seventies",
+        "u80s",
+        "insound"
+      ],
+      "tags": [
+        "oldies",
+        "80s"
+      ]
+    },
+    "night": {
+      "stations": [
+        "thetrip",
+        "darkzone",
+        "secretagent"
+      ],
+      "tags": [
+        "downtempo",
+        "trip hop"
+      ]
+    },
+    "rain": {
+      "stations": [
+        "dronezone",
+        "lush"
+      ],
+      "tags": [
+        "ambient",
+        "rain"
+      ]
+    },
+    "driving": {
+      "stations": [
+        "thetrip",
+        "u80s",
+        "beatblender"
+      ],
+      "tags": [
+        "synthwave",
+        "electronic"
+      ]
+    },
+    "ambient": {
+      "stations": [
+        "dronezone",
+        "deepspaceone",
+        "synphaera"
+      ],
+      "tags": [
+        "ambient"
+      ]
+    },
+    "drone": {
+      "stations": [
+        "dronezone",
+        "dz2",
+        "darkzone"
+      ],
+      "tags": [
+        "drone"
+      ]
+    },
+    "electronic": {
+      "stations": [
+        "beatblender",
+        "lush",
+        "spacestation"
+      ],
+      "tags": [
+        "electronic"
+      ]
+    },
+    "idm": {
+      "stations": [
+        "cliqhop",
+        "n5md"
+      ],
+      "tags": [
+        "idm"
+      ]
+    },
+    "downtempo": {
+      "stations": [
+        "groovesalad",
+        "thetrip",
+        "lush"
+      ],
+      "tags": [
+        "downtempo"
+      ]
+    },
+    "trip hop": {
+      "stations": [
+        "thetrip",
+        "fluid"
+      ],
+      "tags": [
+        "trip hop"
+      ]
+    },
+    "lofi": {
+      "stations": [
+        "groovesalad",
+        "fluid"
+      ],
+      "tags": [
+        "lofi",
+        "lo-fi"
+      ]
+    },
+    "lo-fi": {
+      "stations": [
+        "groovesalad",
+        "fluid"
+      ],
+      "tags": [
+        "lofi",
+        "lo-fi"
+      ]
+    },
+    "dubstep": {
+      "stations": [
+        "dubstep"
+      ],
+      "tags": [
+        "dubstep"
+      ]
+    },
+    "dnb": {
+      "stations": [
+        "dubstep",
+        "beatblender"
+      ],
+      "tags": [
+        "drum and bass"
+      ]
+    },
+    "drum and bass": {
+      "stations": [
+        "dubstep",
+        "beatblender"
+      ],
+      "tags": [
+        "drum and bass"
+      ]
+    },
+    "techno": {
+      "stations": [
+        "beatblender",
+        "spacestation"
+      ],
+      "tags": [
+        "techno"
+      ]
+    },
+    "trance": {
+      "stations": [
+        "suburbsofgoa",
+        "spacestation"
+      ],
+      "tags": [
+        "trance"
+      ]
+    },
+    "psytrance": {
+      "stations": [
+        "suburbsofgoa"
+      ],
+      "tags": [
+        "psytrance",
+        "goa"
+      ]
+    },
+    "goa": {
+      "stations": [
+        "suburbsofgoa"
+      ],
+      "tags": [
+        "goa"
+      ]
+    },
+    "synthwave": {
+      "stations": [
+        "u80s",
+        "vaporwaves"
+      ],
+      "tags": [
+        "synthwave"
+      ]
+    },
+    "vaporwave": {
+      "stations": [
+        "vaporwaves"
+      ],
+      "tags": [
+        "vaporwave"
+      ]
+    },
+    "chiptune": {
+      "stations": [
+        "defcon",
+        "cliqhop"
+      ],
+      "tags": [
+        "chiptune",
+        "8bit"
+      ]
+    },
+    "industrial": {
+      "stations": [
+        "doomed"
+      ],
+      "tags": [
+        "industrial"
+      ]
+    },
+    "jazz": {
+      "stations": [
+        "sonicuniverse",
+        "secretagent"
+      ],
+      "tags": [
+        "jazz"
+      ]
+    },
+    "soul": {
+      "stations": [
+        "7soul",
+        "fluid"
+      ],
+      "tags": [
+        "soul"
+      ]
+    },
+    "funk": {
+      "stations": [
+        "7soul",
+        "fluid"
+      ],
+      "tags": [
+        "funk"
+      ]
+    },
+    "blues": {
+      "stations": [
+        "bootliquor",
+        "7soul"
+      ],
+      "tags": [
+        "blues"
+      ]
+    },
+    "hiphop": {
+      "stations": [
+        "fluid"
+      ],
+      "tags": [
+        "hip hop"
+      ]
+    },
+    "hip hop": {
+      "stations": [
+        "fluid"
+      ],
+      "tags": [
+        "hip hop"
+      ]
+    },
+    "rap": {
+      "stations": [
+        "fluid"
+      ],
+      "tags": [
+        "rap",
+        "hip hop"
+      ]
+    },
+    "lounge": {
+      "stations": [
+        "illstreet",
+        "secretagent"
+      ],
+      "tags": [
+        "lounge",
+        "easy listening"
+      ]
+    },
+    "exotica": {
+      "stations": [
+        "tikitime",
+        "illstreet"
+      ],
+      "tags": [
+        "exotica"
+      ]
+    },
+    "tiki": {
+      "stations": [
+        "tikitime"
+      ],
+      "tags": [
+        "exotica",
+        "tiki"
+      ]
+    },
+    "bossa nova": {
+      "stations": [
+        "bossa"
+      ],
+      "tags": [
+        "bossa nova"
+      ]
+    },
+    "bossanova": {
+      "stations": [
+        "bossa"
+      ],
+      "tags": [
+        "bossa nova"
+      ]
+    },
+    "samba": {
+      "stations": [
+        "bossa"
+      ],
+      "tags": [
+        "samba",
+        "brazilian"
+      ]
+    },
+    "latin": {
+      "stations": [
+        "bossa"
+      ],
+      "tags": [
+        "latin"
+      ]
+    },
+    "rock": {
+      "stations": [
+        "indiepop",
+        "seventies",
+        "poptron"
+      ],
+      "tags": [
+        "rock"
+      ]
+    },
+    "indie": {
+      "stations": [
+        "indiepop",
+        "poptron"
+      ],
+      "tags": [
+        "indie"
+      ]
+    },
+    "alternative": {
+      "stations": [
+        "indiepop",
+        "digitalis",
+        "poptron"
+      ],
+      "tags": [
+        "alternative"
+      ]
+    },
+    "punk": {
+      "stations": [
+        "indiepop",
+        "metal"
+      ],
+      "tags": [
+        "punk"
+      ]
+    },
+    "metal": {
+      "stations": [
+        "metal"
+      ],
+      "tags": [
+        "metal"
+      ]
+    },
+    "pop": {
+      "stations": [
+        "poptron",
+        "insound"
+      ],
+      "tags": [
+        "pop"
+      ]
+    },
+    "folk": {
+      "stations": [
+        "folkfwd",
+        "thistle"
+      ],
+      "tags": [
+        "folk"
+      ]
+    },
+    "americana": {
+      "stations": [
+        "bootliquor",
+        "folkfwd"
+      ],
+      "tags": [
+        "americana",
+        "country"
+      ]
+    },
+    "country": {
+      "stations": [
+        "bootliquor"
+      ],
+      "tags": [
+        "country"
+      ]
+    },
+    "bluegrass": {
+      "stations": [
+        "bootliquor"
+      ],
+      "tags": [
+        "bluegrass"
+      ]
+    },
+    "celtic": {
+      "stations": [
+        "thistle"
+      ],
+      "tags": [
+        "celtic"
+      ]
+    },
+    "world": {
+      "stations": [
+        "thistle",
+        "suburbsofgoa",
+        "bossa"
+      ],
+      "tags": [
+        "world"
+      ]
+    },
+    "reggae": {
+      "stations": [
+        "reggae"
+      ],
+      "tags": [
+        "reggae"
+      ]
+    },
+    "dub": {
+      "stations": [
+        "reggae",
+        "dubstep"
+      ],
+      "tags": [
+        "dub"
+      ]
+    },
+    "oldies": {
+      "stations": [
+        "7soul",
+        "insound"
+      ],
+      "tags": [
+        "oldies"
+      ]
+    },
+    "70s": {
+      "stations": [
+        "seventies"
+      ],
+      "tags": [
+        "70s"
+      ]
+    },
+    "80s": {
+      "stations": [
+        "u80s"
+      ],
+      "tags": [
+        "80s"
+      ]
+    },
+    "covers": {
+      "stations": [
+        "covers"
+      ],
+      "tags": [
+        "covers"
+      ]
+    },
+    "spoken": {
+      "stations": [
+        "sfinsf",
+        "sf1033"
+      ],
+      "tags": [
+        "talk",
+        "spoken word"
+      ]
+    },
+    "news": {
+      "stations": [
+        "sf1033",
+        "scanner"
+      ],
+      "tags": [
+        "news"
+      ]
+    },
+    "amapiano": {
+      "stations": [],
+      "tags": [
+        "amapiano",
+        "afro house",
+        "deep house"
+      ]
+    },
+    "log drum": {
+      "stations": [],
+      "tags": [
+        "amapiano",
+        "afro house"
+      ]
+    },
+    "yanos": {
+      "stations": [],
+      "tags": [
+        "amapiano"
+      ]
+    },
+    "afrobeats": {
+      "stations": [],
+      "tags": [
+        "afrobeats",
+        "afropop"
+      ]
+    },
+    "afro house": {
+      "stations": [],
+      "tags": [
+        "afro house",
+        "deep house"
+      ]
+    },
+    "afrobeat": {
+      "stations": [],
+      "tags": [
+        "afrobeat",
+        "afrojazz"
+      ]
+    },
+    "gqom": {
+      "stations": [],
+      "tags": [
+        "gqom",
+        "south africa"
+      ]
+    },
+    "kwaito": {
+      "stations": [],
+      "tags": [
+        "kwaito",
+        "south africa"
+      ]
+    },
+    "house": {
+      "stations": [
+        "beatblender"
+      ],
+      "tags": [
+        "house",
+        "deep house"
+      ]
+    },
+    "deep house": {
+      "stations": [
+        "beatblender"
+      ],
+      "tags": [
+        "deep house"
+      ]
+    },
+    "garage": {
+      "stations": [
+        "dubstep"
+      ],
+      "tags": [
+        "uk garage",
+        "garage"
+      ]
+    },
+    "dancehall": {
+      "stations": [
+        "reggae"
+      ],
+      "tags": [
+        "dancehall"
+      ]
+    },
+    "soca": {
+      "stations": [],
+      "tags": [
+        "soca",
+        "caribbean"
+      ]
+    },
+    "highlife": {
+      "stations": [],
+      "tags": [
+        "highlife",
+        "african"
+      ]
+    },
+    "classical": {
+      "stations": [],
+      "tags": [
+        "classical"
+      ]
+    },
+    "opera": {
+      "stations": [],
+      "tags": [
+        "opera",
+        "classical"
+      ]
+    },
+    "piano": {
+      "stations": [],
+      "tags": [
+        "piano",
+        "classical"
+      ]
+    },
+    "gospel": {
+      "stations": [],
+      "tags": [
+        "gospel"
+      ]
+    },
+    "ska": {
+      "stations": [
+        "reggae"
+      ],
+      "tags": [
+        "ska"
+      ]
+    },
+    "k-pop": {
+      "stations": [],
+      "tags": [
+        "kpop"
+      ]
+    },
+    "anime": {
+      "stations": [],
+      "tags": [
+        "anime",
+        "j-pop"
+      ]
+    },
+    "beats": {
+      "stations": [
+        "groovesalad",
+        "fluid",
+        "beatblender"
+      ],
+      "tags": [
+        "downtempo",
+        "beats"
+      ]
+    },
+    "code": {
+      "stations": [
+        "groovesalad",
+        "defcon",
+        "cliqhop"
+      ],
+      "tags": [
+        "electronic",
+        "chillout"
+      ]
+    },
+    "study": {
+      "stations": [
+        "groovesalad",
+        "dronezone"
+      ],
+      "tags": [
+        "ambient",
+        "study"
+      ]
+    },
+    "background": {
+      "stations": [
+        "groovesalad",
+        "dronezone"
+      ],
+      "tags": [
+        "ambient"
+      ]
+    },
+    "instrumental": {
+      "stations": [
+        "groovesalad",
+        "sonicuniverse"
+      ],
+      "tags": [
+        "instrumental"
+      ]
+    },
+    "groove": {
+      "stations": [
+        "groovesalad",
+        "beatblender",
+        "7soul"
+      ],
+      "tags": [
+        "funk",
+        "downtempo"
+      ]
+    },
+    "soft": {
+      "stations": [
+        "lush",
+        "bossa"
+      ],
+      "tags": [
+        "ambient",
+        "lounge"
+      ]
+    },
+    "work": {
+      "stations": [
+        "groovesalad",
+        "dronezone"
+      ],
+      "tags": [
+        "ambient",
+        "chillout"
+      ]
+    }
   }
 }

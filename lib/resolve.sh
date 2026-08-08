@@ -123,7 +123,23 @@ selecta_resolve() {
 		| ( [ $moodtoks[] as $t
 			  | moods[$t].stations[] as $sid
 			  | chans[] | select(.id == $sid)
-			  | card(.; 0.8; "mood: " + $t) ] ) as $tokmoodcards
+			  # Weighted by how much of the query the mood vocabulary actually
+			  # explains. A flat score meant one incidental word in a song
+			  # title ("Reggae Night", "Around the World") cleared the 0.7
+			  # threshold, so the request never reached YouTube and the user
+			  # silently got an unrelated station.
+			  # Curve chosen so a query that is mostly mood words stays
+			  # confident while one stray mood word does not. Straight
+			  # proportional scaling pushed "something calm and ambient for
+			  # deep focus" below the threshold and out to YouTube, which
+			  # would open a window for a background-music request.
+			  #   coverage 1.00 -> 0.94   mostly-mood query, radio
+			  #   coverage 0.60 -> 0.74   still radio
+			  #   coverage 0.50 -> 0.69   falls through to YouTube
+			  # Half coverage has to fall through: "Jimmy Cliff Reggae Night"
+			  # and "Daft Punk Around the World" each contain two mood words
+			  # and are still song titles.
+			  | card(.; (0.44 + 0.5 * (($moodtoks | length) / (toks | length))); "mood: " + $t) ] ) as $tokmoodcards
 
 		# Tier 1c: token overlap over title, genre, id and description.
 		# Normalised so that matching a title or genre outright scores 1.0 per
@@ -142,8 +158,12 @@ selecta_resolve() {
 				  ] | add // 0 ) as $raw
 			  # Capped below the curated mood scores so that a hand-picked
 			  # station outranks an incidental genre-string match.
+			  # Divided by the real per-token maximum. The four field weights
+			  # sum to 9, so dividing by 3 let a single matching token out of
+			  # four reach the cap: "Nirvana Unplugged Live" scored SomaFM
+			  # Live at 0.9 on the word "live" alone.
 			  | ( if (textToks | length) == 0 then 0
-				  else ([ $raw / ((textToks | length) * 3), 0.9 ] | min) end ) as $norm
+				  else ([ $raw / ((textToks | length) * 9) * 2, 0.9 ] | min) end ) as $norm
 			  | select($norm > 0)
 			  | card($c; $norm; "text match") ] ) as $textcards
 

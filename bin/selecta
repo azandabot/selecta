@@ -387,29 +387,71 @@ cmd_next() {
 	start_source "$(printf '%s' "$_cn_next" | jq -c '{id,kind,provider,title,resolver}')"
 }
 
+# Control has to reach whichever backend is actually playing. These used to
+# talk only to mpv, so with a YouTube track playing `stop` and `pause` reported
+# "nothing is playing" while the music carried on in the window.
 cmd_pause() {
-	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
-	selecta_ipc_set pause true
-	printf 'Paused.\n'
+	case $(live_backend) in
+	youtube)
+		yt_queue_cmd '{"action":"pause"}'
+		printf 'Paused.\n'
+		;;
+	radio)
+		selecta_ipc_set pause true
+		printf 'Paused.\n'
+		;;
+	*) selecta_die "$EX_NOTFOUND" "nothing is playing" ;;
+	esac
 }
 
 cmd_go() {
-	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
-	selecta_ipc_set pause false
-	printf 'Playing.\n'
+	case $(live_backend) in
+	youtube)
+		yt_queue_cmd '{"action":"play"}'
+		printf 'Playing.\n'
+		;;
+	radio)
+		selecta_ipc_set pause false
+		printf 'Playing.\n'
+		;;
+	*) selecta_die "$EX_NOTFOUND" "nothing is playing" ;;
+	esac
 }
 
 cmd_stop() {
-	selecta_ipc_up || {
+	_cst_hit=0
+	# Both are stopped, not just the live one: a stale backend left running
+	# from an earlier command is exactly what makes "stop" look broken.
+	if selecta_window_up; then
+		yt_queue_cmd '{"action":"stop"}'
+		_cst_hit=1
+	fi
+	if selecta_ipc_up; then
+		selecta_ipc_command '["stop"]' >/dev/null
+		_cst_hit=1
+	fi
+	selecta_state_write stopped 2>/dev/null || true
+	if [ "$_cst_hit" -eq 1 ]; then
+		printf 'Stopped.\n'
+	else
 		printf 'Nothing playing.\n'
-		return 0
-	}
-	selecta_ipc_command '["stop"]' >/dev/null
-	printf 'Stopped.\n'
+	fi
 }
 
 cmd_vol() {
-	selecta_ipc_up || selecta_die "$EX_NOTFOUND" "nothing is playing"
+	_cv_back=$(live_backend)
+	[ "$_cv_back" != none ] || selecta_die "$EX_NOTFOUND" "nothing is playing"
+	if [ "$_cv_back" = youtube ]; then
+		case ${1:-} in
+		'') selecta_die "$EX_USAGE" "volume needs a value in the player window" ;;
+		mute) yt_queue_cmd '{"action":"mute"}' ;;
+		unmute) yt_queue_cmd '{"action":"unmute"}' ;;
+		*[!0-9]*) selecta_die "$EX_USAGE" "youtube volume takes 0-100, mute or unmute" ;;
+		*) yt_queue_cmd "$(jq -nc --argjson v "$1" '{action:"volume",value:$v}')" ;;
+		esac
+		printf 'Volume %s\n' "${1}"
+		return 0
+	fi
 	_cv=${1:-}
 	[ -n "$_cv" ] || {
 		printf '%s\n' "$(selecta_ipc_get volume | cut -d. -f1)"

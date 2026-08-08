@@ -175,6 +175,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return f"http://{host}:{port}"
 
 
+def _notify_shell(payload):
+    try:
+        subprocess.run(
+            [str(ROOT / "bin" / "selecta"), "__yt-state"],
+            input=json.dumps(payload), text=True, capture_output=True,
+            timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _watch_page():
+    """Marks playback stopped when the page stops polling.
+
+    Closing the player window is the ordinary way to stop a track, and nothing
+    else notices: the browser process survives, the shell is not running, and
+    the state file would otherwise say "playing" forever with the status line
+    stuck on a song that ended minutes ago.
+    """
+    was_live = False
+    while True:
+        time.sleep(2)
+        with _lock:
+            seen = _last_seen
+        live = bool(seen) and (time.monotonic() - seen) < 6
+        if was_live and not live:
+            _notify_shell({"status": "stopped", "provider": "youtube",
+                           "title": "", "artist": "", "videoId": ""})
+        was_live = live
+
+
 def main():
     # Port 0 lets the OS pick a free one; loopback only, never 0.0.0.0.
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -188,6 +219,8 @@ def main():
         "token": TOKEN,
         "pid": os.getpid(),
     }))
+
+    threading.Thread(target=_watch_page, daemon=True).start()
 
     try:
         server.serve_forever(poll_interval=0.5)

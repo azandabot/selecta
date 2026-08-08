@@ -52,8 +52,8 @@ t_eq "reaping is safe when there is nothing to reap" "0" "$(
 # --- the success banner must not be satisfied by stale state ----------------
 # play now writes stopped before issuing the command, so a leftover "playing"
 # from a previous session cannot make the wait return immediately.
-# Both the radio and YouTube paths clear state first, so two occurrences.
-t_eq "both play paths clear state before playing" "2" \
+# Radio play, YouTube play, and stop all clear state first.
+t_eq "every path that changes playback clears state" "3" \
 	"$(grep -cF 'selecta_state_write stopped 2>/dev/null || true' "$SELECTA_ROOT/bin/selecta")"
 t_eq "radio path checks the load reply" "1" \
 	"$(grep -cF 'the player did not accept that stream' "$SELECTA_ROOT/bin/selecta")"
