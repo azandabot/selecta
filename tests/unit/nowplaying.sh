@@ -89,7 +89,7 @@ probe >/dev/null 2>&1 || true
 t_eq "after denial osascript is not called again" "0" \
 	"$(grep -c '^osascript$' "$CALLS" || true)"
 t_eq "doctor explains how to re-enable" "1" \
-	"$(selecta_np_capability | grep -c 'Automation')"
+	"$(PATH="$STUB:$PATH" selecta_np_capability | grep -c 'Automation')"
 selecta_cfg_set '.nowplaying.macos_automation' 'null'
 
 # --- the off switch ----------------------------------------------------------

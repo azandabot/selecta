@@ -14,6 +14,14 @@ mkdir -p "$SELECTA_HOME/run"
 L=$SELECTA_ROOT/statusline/launcher.sh
 SEG=$SELECTA_HOME/run/segment
 
+# TERM and NO_COLOR are inputs to the launcher, not ambient state. CI runners
+# export TERM=dumb, which silently turned every colour assertion into a
+# plain-variant assertion. Defaulted here so the two tests below can still
+# override them per call.
+TERM=${SELECTA_TEST_TERM:-xterm}
+export TERM
+unset NO_COLOR
+
 run() { COLUMNS=${1:-80} sh "$L" </dev/null 2>/dev/null; }
 code() {
 	COLUMNS=${1:-80} sh "$L" </dev/null >/dev/null 2>&1

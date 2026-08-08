@@ -29,7 +29,15 @@ jobs:
         # compile(), not ast.parse(): ast.parse accepts "name used prior to
         # global declaration", which is a SyntaxError only at compile time.
         # That exact bug shipped and broke every YouTube playback.
-        run: python3 -c "compile(open('plugins/selecta/libexec/selecta-httpd').read(), 'selecta-httpd', 'exec')"
+        run: |
+          found=0
+          for f in $(git ls-files 'plugins/*/libexec/*'); do
+            case $(head -1 "$f") in *python3*) ;; *) continue ;; esac
+            found=$((found + 1))
+            python3 -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" "$f"
+            echo "compiled $f"
+          done
+          [ "$found" -gt 0 ] || { echo "no python files found; the check is pointing at nothing"; exit 1; }
 
       - name: json is well formed
         run: |

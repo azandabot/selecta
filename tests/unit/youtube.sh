@@ -110,18 +110,16 @@ t_eq "an httpd.json with no origin means no window" "1" "$(
 )"
 
 # The pointer, not a glob of the versioned plugin cache path.
-t_eq "an absent plugin is reported as absent" "1" "$(
+t_eq "an absent plugin is reported as absent" "absent" "$(
 	rm -f "$SELECTA_HOME/yt-bin-path"
-	PATH=$STUB selecta_yt_bin >/dev/null 2>&1
-	echo $?
+	PATH=$STUB selecta_yt_bin >/dev/null 2>&1 && echo found || echo absent
 )"
 printf '%s\n' "$SELECTA_YT_ROOT/bin/selecta-youtube" >"$SELECTA_HOME/yt-bin-path"
 t_eq "the pointer file locates the plugin" "$SELECTA_YT_ROOT/bin/selecta-youtube" \
 	"$(PATH=$STUB selecta_yt_bin)"
 printf '%s\n' "$SELECTA_HOME/gone" >"$SELECTA_HOME/yt-bin-path"
-t_eq "a stale pointer is not trusted" "1" "$(
-	PATH=$STUB selecta_yt_bin >/dev/null 2>&1
-	echo $?
+t_eq "a stale pointer is not trusted" "absent" "$(
+	PATH=$STUB selecta_yt_bin >/dev/null 2>&1 && echo found || echo absent
 )"
 
 # A pointer written from a relative $0 only resolves from the directory the

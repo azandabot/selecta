@@ -59,7 +59,7 @@ for _f in $_files; do
 	printf '\n%s%s%s\n' "$C_BOLD" "${_f#"$TESTS_DIR"/}" "$C_OFF"
 	_before=$(wc -l <"$T_RESULTS")
 	# A test file that dies partway must not abort the whole run.
-	sh "$_f" || printf 'not ok %s (test file exited non-zero)\n' "$_f" >>"$T_RESULTS"
+	"${SELECTA_SH:-sh}" "$_f" || printf 'not ok %s (test file exited non-zero)\n' "$_f" >>"$T_RESULTS"
 	_after=$(wc -l <"$T_RESULTS")
 	[ "$_after" -gt "$_before" ] || printf '  (no assertions)\n'
 	_ran=$((_ran + 1))

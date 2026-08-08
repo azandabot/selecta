@@ -1,3 +1,4 @@
+<img src="selecta-logo.png" style="width: 350px; margin: 0 auto -50px auto;display: flex;"/>
 <h1 align="center">selecta</h1>
 <p align="center"><em>What you're playing, in your Claude Code status line.<br>Whatever you're playing it with.</em></p>
 
@@ -257,6 +258,13 @@ Stated plainly, because finding these out yourself is worse.
 ./tests/run.sh unit         # offline, deterministic
 ./tests/run.sh integration  # real mpv with --ao=null, no audio device needed
 ./tests/run.sh contract     # live upstreams; nightly in CI, never on PRs
+```
+
+Run it under `dash` before pushing. macOS `/bin/sh` is bash in POSIX mode and
+is far more forgiving than the dash on the Linux CI leg:
+
+```
+SELECTA_SH=/bin/dash TERM=dumb ./tests/run.sh
 ```
 
 `integration/playback.sh` runs real `mpv` against an `av://lavfi` tone and

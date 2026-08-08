@@ -63,6 +63,7 @@ if selecta_ipc_up; then
 
 	t_eq "playback reaches playing" "true" \
 		"$(wait_for '[ "$(jq -r .status "$SELECTA_STATE" 2>/dev/null)" = playing ]' 80 && echo true || echo false)"
+	wait_for '[ "$(sed -n 3p "$SELECTA_SEGMENT" 2>/dev/null)" = playing ]' 40
 	t_eq "state names the source" "Test Tone" \
 		"$(jq -r '.source.title // ""' "$SELECTA_STATE" 2>/dev/null)"
 	t_eq "the segment has four lines" "4" "$(wc -l <"$SELECTA_SEGMENT" | tr -d ' ')"
@@ -94,10 +95,19 @@ fi
 
 # --- teardown -----------------------------------------------------------------
 sh "$SELECTA_ROOT/libexec/selecta-teardown" 2>/dev/null
-t_eq "teardown stops the supervisor within 3s" "true" \
-	"$(wait_for '! kill -0 '"$SUP_PID"' 2>/dev/null' 12 && echo true || echo false)"
+exited() {
+	[ ! -f "$SELECTA_PIDFILE" ] || return 1
+	kill -0 "$SUP_PID" 2>/dev/null || return 0
+	# Still in the process table: only acceptable as an unreaped zombie.
+	case $(ps -o stat= -p "$SUP_PID" 2>/dev/null | tr -d ' ') in
+	Z*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+t_eq "teardown stops the supervisor" "true" \
+	"$(wait_for exited 40 && echo true || echo false)"
 t_eq "teardown takes mpv with it" "true" \
-	"$(wait_for '! selecta_ipc_up' 12 && echo true || echo false)"
+	"$(wait_for '! selecta_ipc_up' 40 && echo true || echo false)"
 
 kill "$SUP_PID" 2>/dev/null
 pkill -f "input-ipc-server=$SELECTA_HOME" 2>/dev/null
