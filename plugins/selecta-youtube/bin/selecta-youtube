@@ -214,10 +214,10 @@ yt_start() {
 cmd_replay() {
 	_cr_card=$(cat)
 	_cr_vid=$(printf '%s' "$_cr_card" | jq -r '.resolver.id // (.id | sub("^youtube:"; ""))')
-	[ -n "$_cr_vid" ] && [ "$_cr_vid" != null ] || {
+	if [ -z "$_cr_vid" ] || [ "$_cr_vid" = null ]; then
 		printf 'selecta-youtube: that crate entry has no video id\n' >&2
 		return "$EX_NOTFOUND"
-	}
+	fi
 	selecta_ensure_dirs || return "$EX_UNWRITABLE"
 	jq -nc --argjson c "[$(printf '%s' "$_cr_card" | jq -c --arg v "$_cr_vid" '. + {videoId: $v}')]" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \

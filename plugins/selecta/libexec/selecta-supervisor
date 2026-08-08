@@ -103,7 +103,7 @@ sup_start_mpv() {
 	[ "$(selecta_engine)" = mpv ] || return 1
 	selecta_ipc_reap
 	MPV_PID=$(selecta_mpv_start)
-	if selecta_mpv_wait; then
+	if selecta_mpv_wait 100; then
 		selecta_log info "mpv up (pid=$MPV_PID socket=$SELECTA_MPV_SOCK)"
 		return 0
 	fi

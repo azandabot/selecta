@@ -99,8 +99,8 @@ NAMES=$(report names | sort)
 t_eq "all five skills are present" \
 	"selecta selecta-crate selecta-doctor selecta-statusline selecta-youtube" \
 	"$(printf '%s' "$NAMES" | tr '\n' ' ' | sed 's/ $//')"
-t_eq "no two skills share a name" "$(printf '%s' "$NAMES" | wc -l | tr -d ' ')" \
-	"$(printf '%s' "$NAMES" | uniq | wc -l | tr -d ' ')"
+t_eq "no two skills share a name" "$(printf '%s\n' "$NAMES" | grep -c .)" \
+	"$(printf '%s\n' "$NAMES" | sort -u | grep -c .)"
 
 # Exactly one skill may edit global settings, and exactly two may start audio.
 # That split is the whole reason the surface was divided this way.

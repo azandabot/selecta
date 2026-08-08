@@ -40,6 +40,12 @@ EOF
 probe() { PATH="$STUB:$PATH" selecta_np_probe 2>/dev/null; }
 field() { printf '%s' "$1" | cut -f"$2"; }
 
+# --- macOS -------------------------------------------------------------------
+# uname is stubbed so this runs on Linux too. Without it the whole macOS block
+# fell through the case statement and asserted nothing on the CI leg that
+# actually runs on every push.
+mkstub uname 'printf "Darwin\n"'
+
 # --- the launch-avoidance guarantee -----------------------------------------
 # tell application "Spotify" starts Spotify if it is not running. If the pgrep
 # gate ever regresses, merely looking at the status line would open a music app.
@@ -95,6 +101,52 @@ t_eq "the disable flag stops the probe" "1" "$(
 )"
 selecta_cfg_set '.nowplaying.disabled' false
 
+# --- Linux -------------------------------------------------------------------
+mkstub uname 'printf "Linux\n"'
+rm -f "$STUB/osascript" "$STUB/pgrep"
+
+mkstub playerctl 'printf "Playing\tBonobo\tKong\tspotify\n"'
+_l=$(probe)
+t_eq "playerctl status is parsed" "playing" "$(field "$_l" 1)"
+t_eq "playerctl artist is parsed" "Bonobo" "$(field "$_l" 2)"
+t_eq "playerctl title is parsed" "Kong" "$(field "$_l" 3)"
+t_eq "the player name becomes the label" "spotify" "$(field "$_l" 4)"
+
+# Several players at once is the normal case on a desktop: a paused Firefox tab
+# must not win over music that is actually playing.
+mkstub playerctl 'printf "Paused\tA\tB\tfirefox\nPlaying\tC\tD\tvlc\n"'
+_l=$(probe)
+t_eq "playing beats paused regardless of order" "playing" "$(field "$_l" 1)"
+t_eq "the playing player is the one reported" "vlc" "$(field "$_l" 4)"
+
+mkstub playerctl 'printf "Paused\tA\tB\tfirefox\n"'
+t_eq "paused is reported when nothing is playing" "paused" "$(field "$(probe)" 1)"
+
+# A title containing an apostrophe is why the dbus-send GVariant parser was
+# rejected: any sed for it breaks on exactly this, and it is a lot of songs.
+cat >"$STUB/playerctl" <<'PCTL'
+#!/bin/sh
+printf "playerctl\n" >>"$CALLS"
+printf "Playing\tD'Angelo\tDon't Ever Leave\tspotify\n"
+PCTL
+chmod +x "$STUB/playerctl"
+_l=$(probe)
+t_eq "an apostrophe in the artist survives" "D'Angelo" "$(field "$_l" 2)"
+t_eq "an apostrophe in the title survives" "Don't Ever Leave" "$(field "$_l" 3)"
+
+mkstub playerctl 'printf "Stopped\t\t\tspotify\n"'
+t_eq "a stopped player reports nothing" "1" "$(
+	probe >/dev/null
+	echo $?
+)"
+mkstub playerctl 'exit 1'
+t_eq "no player running reports nothing" "1" "$(
+	probe >/dev/null
+	echo $?
+)"
+
+rm -f "$STUB/uname"
+
 # --- rendering ---------------------------------------------------------------
 _p=$(selecta_segment_lines_plain playing "Kabza De Small" "Sponono" "Spotify" "demo-api")
 t_eq "narrow variant leads with the track" "1" \
@@ -116,11 +168,27 @@ t_eq "a tab in a title does not forge a field" "3" "$(printf '%s' "$_p" | awk -F
 # --- the zero-dependency claim ------------------------------------------------
 # The whole point: showing what Spotify is playing must work where jq does not.
 NOJQ=$(t_path_without jq)
-_out=$(PATH="$STUB:$NOJQ" sh -c '
-	. "$1/lib/common.sh"; SELECTA_ROOT=$1
-	. "$1/lib/ipc.sh"; . "$1/lib/state.sh"; . "$1/lib/nowplaying.sh"
-	selecta_np_probe' _ "$SELECTA_ROOT" 2>/dev/null)
-t_eq "the probe works with no jq" "playing" "$(field "$_out" 1)"
+nojq_probe() {
+	PATH="$STUB:$NOJQ" sh -c '
+		. "$1/lib/common.sh"; SELECTA_ROOT=$1
+		. "$1/lib/ipc.sh"; . "$1/lib/state.sh"; . "$1/lib/nowplaying.sh"
+		selecta_np_probe' _ "$SELECTA_ROOT" 2>/dev/null
+}
+
+rm -f "$STUB/playerctl"
+mkstub uname 'printf "Darwin\n"'
+mkstub pgrep 'exit 0'
+mkstub osascript 'printf "playing\tKabza De Small\tSponono\n"'
+t_eq "the macOS probe works with no jq" "playing" "$(field "$(nojq_probe)" 1)"
+t_eq "the macOS probe keeps the artist with no jq" "Kabza De Small" \
+	"$(field "$(nojq_probe)" 2)"
+
+rm -f "$STUB/osascript" "$STUB/pgrep"
+mkstub uname 'printf "Linux\n"'
+mkstub playerctl 'printf "Playing\tBonobo\tKong\tspotify\n"'
+t_eq "the Linux probe works with no jq" "playing" "$(field "$(nojq_probe)" 1)"
+t_eq "the Linux probe keeps the title with no jq" "Kong" "$(field "$(nojq_probe)" 3)"
+rm -f "$STUB/uname"
 
 _out=$(PATH="$NOJQ" sh -c '
 	. "$1/lib/common.sh"; SELECTA_ROOT=$1

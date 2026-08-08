@@ -16,11 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJf - --strip-components=1 -C /usr/local/bin "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          shellcheck --version
           git ls-files -z | while IFS= read -r -d '' f; do
             case $(head -c 20 "$f" 2>/dev/null) in '#!/bin/sh'*) printf '%s\0' "$f" ;; esac
-          done | xargs -0 shellcheck -x -s sh
+          done | xargs -0 shellcheck -x -s sh -S style
       - name: python compiles
         # compile(), not ast.parse(): ast.parse accepts "name used prior to
         # global declaration", which is a SyntaxError only at compile time.

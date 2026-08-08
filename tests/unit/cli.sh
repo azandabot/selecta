@@ -76,8 +76,13 @@ _d_code=$(
 )
 t_eq "doctor with no jq exits 4" "4" "$_d_code"
 t_eq "doctor with no jq reports jq missing" "1" "$(printf '%s' "$_d_out" | grep -c 'MISSING  jq')"
-t_eq "doctor with no jq prints an install command" "1" \
-	"$(printf '%s' "$_d_out" | grep -c 'brew install\|apt-get install\|install Homebrew')"
+# The test PATH deliberately has no package manager, so the hint is the generic
+# fallback. What must hold on every platform is that it names the missing tool
+# and tells the user selecta will not run it for them.
+t_eq "doctor with no jq names jq in the install hint" "1" \
+	"$(printf '%s' "$_d_out" | grep -c 'install.*jq')"
+t_eq "doctor with no jq refuses to run it" "1" \
+	"$(printf '%s' "$_d_out" | grep -c 'will not run that for you')"
 t_eq "doctor with no jq does not leak a shell error" "0" \
 	"$(grep -c 'command not found' /tmp/selecta-cli-djq.err || true)"
 rm -f /tmp/selecta-cli-djq.err
