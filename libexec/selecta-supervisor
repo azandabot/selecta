@@ -44,6 +44,7 @@ for _a in "$@"; do
 	case $_a in
 	--monitor) MODE=monitor ;;
 	--detached) MODE=detached ;;
+	--once) MODE=once ;;
 	esac
 done
 
@@ -91,17 +92,26 @@ printf '%s\n' "$$" >"$SELECTA_PIDFILE"
 selecta_log info "supervisor started (mode=$MODE pid=$$)"
 
 # --- player -----------------------------------------------------------------
-if [ "$(selecta_engine)" != mpv ]; then
-	sup_fatal "mpv is not installed. Run: selecta doctor"
-	exit "$EX_MISSING_DEP"
-fi
+# mpv is started lazily, only once something asks for radio. Requiring it up
+# front meant a machine without mpv had no supervisor, and therefore no status
+# line either — even though showing what Spotify is playing needs neither.
+sup_want_mpv() { [ -f "$SELECTA_RUN/want-mpv" ]; }
 
-MPV_PID=$(selecta_mpv_start)
-if ! selecta_mpv_wait; then
+sup_start_mpv() {
+	selecta_ipc_up && return 0
+	sup_want_mpv || return 1
+	[ "$(selecta_engine)" = mpv ] || return 1
+	selecta_ipc_reap
+	MPV_PID=$(selecta_mpv_start)
+	if selecta_mpv_wait; then
+		selecta_log info "mpv up (pid=$MPV_PID socket=$SELECTA_MPV_SOCK)"
+		return 0
+	fi
 	sup_fatal "mpv failed to start"
-	exit "$EX_MISSING_DEP"
-fi
-selecta_log info "mpv up (pid=$MPV_PID socket=$SELECTA_MPV_SOCK)"
+	MPV_PID=''
+	return 1
+}
+
 selecta_state_write stopped
 
 # --- event handling ---------------------------------------------------------
@@ -199,49 +209,56 @@ sup_watchdog() {
 		_wd_age=$(($(date +%s) - $(selecta_file_mtime "$SELECTA_HEARTBEAT")))
 		[ "$_wd_age" -lt "$HEARTBEAT_LIMIT" ] || return 1
 	fi
-	kill -0 "$MPV_PID" 2>/dev/null || return 1
+	# mpv being down is normal now: the supervisor outlives it and exists to
+	# poll foreign players too.
+	if [ -n "$MPV_PID" ] && ! kill -0 "$MPV_PID" 2>/dev/null; then
+		MPV_PID=''
+		rm -f "$SELECTA_MPV_SOCK" 2>/dev/null
+	fi
 	return 0
 }
 
-# Persistent event connection. The fifo keeps nc's stdin open so mpv does not
-# see EOF and drop us; without it the connection closes immediately.
-FIFO=$SELECTA_RUN/events.fifo
-rm -f "$FIFO"
-mkfifo "$FIFO" 2>/dev/null || {
-	sup_fatal "cannot create $FIFO"
-	exit "$EX_UNWRITABLE"
-}
-# Opened read-write on purpose. Opening a fifo write-only blocks until a
-# reader attaches, and the reader here is the nc below, so write-only would
-# deadlock before the loop ever starts.
-exec 9<>"$FIFO"
-printf '%s\n' '{"command":["observe_property",1,"metadata"]}' >&9
-printf '%s\n' '{"command":["observe_property",2,"core-idle"]}' >&9
-printf '%s\n' '{"command":["observe_property",3,"pause"]}' >&9
+# One poll loop, no persistent connection. The fifo plus long-lived `nc` was
+# the harder of the two unix-socket uses and needed a transport that many
+# machines do not have; a two second poll is invisible on a track that changes
+# every four minutes, and it is the same loop that reads foreign players.
+SELECTA_TICK=${SELECTA_TICK:-2}
 
-nc -U "$SELECTA_MPV_SOCK" <"$FIFO" 2>/dev/null | while IFS= read -r _line; do
-	case $_line in
-	*'"event"'*)
-		_ev=$(printf '%s' "$_line" | jq -r '.event // ""' 2>/dev/null)
-		case $_ev in
-		property-change | file-loaded | playback-restart)
-			_paused=$(selecta_ipc_get pause 2>/dev/null)
-			_idle=$(selecta_ipc_get core-idle 2>/dev/null)
-			if [ "$_paused" = true ]; then
-				sup_refresh paused
-			elif [ "$_idle" = true ]; then
-				sup_refresh buffering
-			else
-				sup_refresh playing
-			fi
-			;;
-		end-file | idle)
+sup_tick() {
+	sup_start_mpv || true
+
+	if selecta_ipc_up; then
+		_t_paused=$(selecta_ipc_get pause 2>/dev/null)
+		_t_idle=$(selecta_ipc_get core-idle 2>/dev/null)
+		_t_path=$(selecta_ipc_get path 2>/dev/null)
+		if [ -z "$_t_path" ] || [ "$_t_path" = null ]; then
 			sup_refresh stopped
-			;;
-		esac
-		;;
-	esac
+		elif [ "$_t_paused" = true ]; then
+			sup_refresh paused
+		elif [ "$_t_idle" = true ]; then
+			sup_refresh buffering
+		else
+			sup_refresh playing
+		fi
+		return 0
+	fi
+
+	# No player of ours. Leave whatever the last state was; the segment keeps
+	# showing the last track rather than blanking.
+	return 0
+}
+
+if [ "$MODE" = once ]; then
+	sup_tick
+	trap - EXIT
+	sup_cleanup
+	exit 0
+fi
+
+while :; do
+	sup_tick
 	sup_watchdog || break
+	sleep "$SELECTA_TICK"
 done
 
 exit 0

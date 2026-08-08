@@ -135,6 +135,7 @@ ensure_player() {
 		exit "$EX_MISSING_DEP"
 	fi
 	: >"$SELECTA_HEARTBEAT"
+	: >"$SELECTA_RUN/want-mpv"
 	if selecta_have setsid; then
 		setsid "$SELECTA_ROOT/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
 	else
@@ -503,6 +504,7 @@ cmd_stop() {
 		selecta_ipc_command '["stop"]' >/dev/null
 		_cst_hit=1
 	fi
+	rm -f "$SELECTA_RUN/want-mpv" 2>/dev/null
 	selecta_state_write stopped 2>/dev/null || true
 	if [ "$_cst_hit" -eq 1 ]; then
 		printf 'Stopped.\n'
@@ -745,6 +747,13 @@ cmd_doctor() {
 		printf '  player   DEAD SOCKET (cleared on next play)\n'
 	else
 		printf '  player   not running\n'
+	fi
+	_cd_t=$(selecta_ipc_transport)
+	if [ "$_cd_t" = none ]; then
+		printf '  ipc      MISSING. Needs one of: nc with -U, ncat, socat, python3\n'
+		printf '           Radio cannot play without it; the status line still works.\n'
+	else
+		printf '  ipc      %s\n' "$_cd_t"
 	fi
 	printf '  window   %s\n' "$(selecta_window_up && echo "player page live" || echo "closed")"
 	_cd_state=$(selecta_state_read | jq -r '.status // "stopped"')

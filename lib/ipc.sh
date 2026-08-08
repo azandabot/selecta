@@ -3,22 +3,75 @@
 #
 # mpv's --input-ipc-server socket accepts multiple simultaneous clients, so it
 # doubles as selecta's control plane: bin/selecta sends commands here and the
-# supervisor holds a second, long-lived connection for property events. A
-# separate control socket would only duplicate what mpv already provides.
+# supervisor polls the same socket. A separate control socket would only
+# duplicate what mpv already provides.
 #
 # Protocol is newline-delimited JSON:
 #   request  {"command":["set_property","volume",55]}
 #   reply    {"error":"success","data":null,"request_id":0}
-#   event    {"event":"file-loaded"}
+
+# Talking to a unix socket from a shell needs a helper, and `nc -U` is not one
+# of the things you can assume: busybox nc has no -U at all, and Debian's
+# netcat-traditional ships without it. This was a hard dependency checked
+# nowhere and documented nowhere, so a container user got "the player did not
+# accept that stream" while doctor reported everything healthy.
+selecta_ipc_transport() {
+	if [ -s "$SELECTA_RUN/ipc-transport" ]; then
+		cat "$SELECTA_RUN/ipc-transport"
+		return 0
+	fi
+	_it=none
+	if selecta_have nc && nc -h 2>&1 | grep -q -- '-U'; then
+		_it=nc
+	elif selecta_have ncat; then
+		_it=ncat
+	elif selecta_have socat; then
+		_it=socat
+	elif selecta_have python3; then
+		_it=python3
+	fi
+	mkdir -p "$SELECTA_RUN" 2>/dev/null && printf '%s' "$_it" >"$SELECTA_RUN/ipc-transport"
+	printf '%s' "$_it"
+}
+
+selecta_ipc_have_transport() { [ "$(selecta_ipc_transport)" != none ]; }
+
+# One request, one reply. Every backend is given a bounded life so a wedged
+# player degrades to a failed command rather than a hung session.
+_selecta_ipc_raw() {
+	case $(selecta_ipc_transport) in
+	nc) nc -U "$SELECTA_MPV_SOCK" 2>/dev/null ;;
+	ncat) ncat -U "$SELECTA_MPV_SOCK" 2>/dev/null ;;
+	socat) socat - "UNIX-CONNECT:$SELECTA_MPV_SOCK" 2>/dev/null ;;
+	python3)
+		python3 -c '
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(5)
+try:
+    s.connect(sys.argv[1])
+    s.sendall(sys.stdin.buffer.read())
+    s.shutdown(socket.SHUT_WR)
+    while True:
+        b = s.recv(4096)
+        if not b:
+            break
+        sys.stdout.buffer.write(b)
+except OSError:
+    sys.exit(1)
+' "$SELECTA_MPV_SOCK" 2>/dev/null
+		;;
+	*) return "$EX_MISSING_DEP" ;;
+	esac
+}
 
 # A socket file outliving its process is the normal case after a crash, so
 # existence proves nothing. Everything downstream trusted this, which is how
-# `play` came to report success with no player running at all: the stale socket
-# made the launcher skip starting mpv, and then nothing consumed the command.
+# `play` came to report success with no player running at all.
 selecta_ipc_up() {
 	[ -S "$SELECTA_MPV_SOCK" ] || return 1
 	printf '{"command":["get_property","mpv-version"]}\n' |
-		nc -U "$SELECTA_MPV_SOCK" 2>/dev/null | head -1 | grep -q '"error":"success"'
+		_selecta_ipc_raw | head -1 | grep -q '"error":"success"'
 }
 
 # Clears a socket whose process is gone, so the next start is not blocked by
@@ -31,11 +84,9 @@ selecta_ipc_reap() {
 	return 0
 }
 
-# One request, one reply. nc exits when mpv closes its side or the read times
-# out, so a wedged player degrades to a failed command rather than a hang.
 selecta_ipc_send() {
-	selecta_ipc_up || return "$EX_NOTFOUND"
-	printf '%s\n' "$1" | nc -U "$SELECTA_MPV_SOCK" 2>/dev/null | head -1
+	[ -S "$SELECTA_MPV_SOCK" ] || return "$EX_NOTFOUND"
+	printf '%s\n' "$1" | _selecta_ipc_raw | head -1
 }
 
 selecta_ipc_command() {
@@ -49,4 +100,3 @@ selecta_ipc_get() {
 	[ -n "$_ig_reply" ] || return 1
 	printf '%s' "$_ig_reply" | jq -e -r 'select(.error == "success") | .data' 2>/dev/null
 }
-
