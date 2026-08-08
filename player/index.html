@@ -28,7 +28,22 @@
   .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; flex: 0 0 auto; }
   .dot.paused { background: #facc15; }
   .dot.error  { background: #f87171; }
-  #hint { padding: 0 10px 8px; color: #6b6b73; font-size: 11px; }
+  #meta { display: flex; gap: 10px; padding: 0 10px 6px; color: #8a8a93; font-size: 11px; flex-wrap: wrap; }
+  #meta span { white-space: nowrap; }
+  #elapsed { font-variant-numeric: tabular-nums; }
+  #quota strong { color: #cfcfd6; font-weight: 600; }
+  #foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 10px; border-top: 1px solid #1e1e23; font-size: 11px; color: #6b6b73;
+  }
+  #foot a { color: #9a9aa2; text-decoration: none; }
+  #foot a:hover { color: #e8e8ea; text-decoration: underline; }
+  #star {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid #2e2e34; border-radius: 6px; padding: 3px 8px; color: #e8e8ea;
+  }
+  #star:hover { background: #26262c; text-decoration: none; }
+  #hint { padding: 0 10px 6px; color: #6b6b73; font-size: 11px; min-height: 14px; }
   button {
     background: #1c1c20; color: #e8e8ea; border: 1px solid #2e2e34;
     border-radius: 6px; padding: 5px 9px; font: inherit; cursor: pointer;
@@ -46,7 +61,16 @@
     </div>
     <button id="toggle" type="button">Pause</button>
   </div>
+  <div id="meta">
+    <span id="state">idle</span>
+    <span id="elapsed">–:–– / –:––</span>
+    <span id="quota"></span>
+  </div>
   <div id="hint"></div>
+  <div id="foot">
+    <a href="https://www.youtube.com" target="_blank" rel="noopener">Music by YouTube</a>
+    <a id="star" href="https://github.com/azandabot/selecta" target="_blank" rel="noopener">★ Star selecta</a>
+  </div>
 
 <script>
 (function () {
@@ -63,6 +87,9 @@
   var elDot    = document.getElementById("dot");
   var elToggle = document.getElementById("toggle");
   var elHint   = document.getElementById("hint");
+  var elState  = document.getElementById("state");
+  var elElapsed= document.getElementById("elapsed");
+  var elQuota  = document.getElementById("quota");
 
   function api(path, body) {
     var url = ORIGIN + path + "?t=" + encodeURIComponent(TOKEN);
@@ -80,6 +107,8 @@
   function report(status, extra) {
     var payload = {
       status: status,
+      position: (player && player.getCurrentTime) ? Math.floor(player.getCurrentTime() || 0) : 0,
+      duration: (player && player.getDuration) ? Math.floor(player.getDuration() || 0) : 0,
       videoId: current.videoId,
       title: current.title,
       artist: current.artist,
@@ -91,14 +120,37 @@
     api("/state", payload).catch(function () {});
   }
 
+  function clock(t) {
+    if (!isFinite(t) || t < 0) { return "–:––"; }
+    var m = Math.floor(t / 60), s2 = Math.floor(t % 60);
+    return m + ":" + (s2 < 10 ? "0" : "") + s2;
+  }
+
   function paint(status) {
     elTitle.textContent = current.title || "selecta";
-    var bits = [];
-    if (current.artist) { bits.push(current.artist); }
-    bits.push(status);
-    elSub.textContent = bits.join(" · ");
+    elSub.textContent = current.artist || (current.videoId ? "YouTube" : "nothing queued");
+    elState.textContent = status;
     elDot.className = "dot" + (status === "paused" ? " paused" : status === "error" ? " error" : "");
     elToggle.textContent = status === "paused" ? "Play" : "Pause";
+  }
+
+  // Elapsed and duration are polled rather than pushed: the player has no
+  // event for time passing, and this is local, so it costs nothing.
+  function tick() {
+    if (player && player.getDuration) {
+      try {
+        elElapsed.textContent = clock(player.getCurrentTime()) + " / " + clock(player.getDuration());
+      } catch (e) { /* player not ready */ }
+    }
+    setTimeout(tick, 1000);
+  }
+
+  // Only a new, uncached search spends quota. Playback and replays are free,
+  // which is worth stating where it is actually being spent.
+  function paintQuota(q) {
+    if (!q) { return; }
+    elQuota.innerHTML = "<strong>" + q.left + "</strong> / " + q.total +
+      " searches left today · replays are free";
   }
 
   window.onYouTubeIframeAPIReady = function () {
@@ -117,6 +169,7 @@
           ready = true;
           elSub.textContent = "ready";
           poll();
+          tick();
         },
         onStateChange: function (e) {
           if (e.data === YT.PlayerState.PLAYING)      { paint("playing");   report("playing"); }
@@ -180,7 +233,7 @@
 
   function poll() {
     api("/cmd")
-      .then(function (r) { handle(r.cmd); })
+      .then(function (r) { paintQuota(r.quota); handle(r.cmd); })
       .catch(function () {})
       .then(function () { setTimeout(poll, 900); });
   }
@@ -192,7 +245,7 @@
   });
 
   // Music is provided by YouTube, and saying so is part of using their player.
-  elHint.textContent = "Playing via YouTube";
+  paint("idle");
 
   var tag = document.createElement("script");
   tag.src = "https://www.youtube.com/iframe_api";

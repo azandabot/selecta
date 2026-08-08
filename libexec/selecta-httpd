@@ -54,6 +54,29 @@ def _write(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
+DAILY_SEARCHES = 100
+
+
+def _quota():
+    """Search quota, read straight from the cache file the shell maintains.
+
+    Only a new, uncached search spends a unit. Playback spends nothing, and a
+    repeated query is served from a 7 day cache, so replaying a song is free.
+    """
+    f = HOME / "cache" / "yt-quota.json"
+    used = 0
+    try:
+        import datetime, zoneinfo
+        today = datetime.datetime.now(
+            zoneinfo.ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+        data = json.loads(f.read_text(encoding="utf-8"))
+        if data.get("date") == today:
+            used = int(data.get("searches", 0))
+    except Exception:
+        used = 0
+    return {"used": used, "left": max(0, DAILY_SEARCHES - used), "total": DAILY_SEARCHES}
+
+
 def _drain_commands():
     """Commands are dropped in by bin/selecta as a file, since the client is a
     shell script and should not need an HTTP client to queue one."""
@@ -92,6 +115,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return secrets.compare_digest(params.get("t", [""])[0], TOKEN)
 
     def do_GET(self):
+        global _last_seen
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
 
@@ -109,13 +133,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/cmd":
             if not self._authed(params):
                 return self._send(403, b'{"error":"forbidden"}')
-            global _last_seen
             with _lock:
                 _last_seen = time.monotonic()
             _drain_commands()
             with _lock:
                 cmd = _queue.pop(0) if _queue else None
-            return self._send(200, json.dumps({"cmd": cmd}).encode())
+            return self._send(200, json.dumps({"cmd": cmd, "quota": _quota()}).encode())
 
         return self._send(404, b'{"error":"not found"}')
 

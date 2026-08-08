@@ -211,9 +211,24 @@ Check it took:
 If doctor says the key is set but searches fail, step 3 was skipped or applied
 to a different project.
 
-**Quota.** 100 searches a day, resetting at midnight Pacific. Each result is
-cached for 7 days, so repeating a request is free, and every play tells you how
-many searches you have left.
+### What actually costs quota
+
+This is the part that is not obvious, so it is worth stating plainly.
+
+| Action | Cost |
+|---|---|
+| Playing a song | **free** — playback uses no API at all |
+| Replaying a song you already played | **free** |
+| Repeating a search from the last 7 days | **free** — served from cache |
+| Pausing, resuming, skipping, volume | **free** |
+| Radio, in any amount | **free** — no key involved |
+| A **new** search phrase | 1 of 100 |
+
+So the daily budget is 100 *distinct new searches*, not 100 plays. Listening to
+the same album on repeat all day costs nothing. Resets at midnight Pacific.
+
+Remaining budget is shown in three places: after every YouTube play, in
+`selecta` status, and live in the player window.
 
 ### About the YouTube window
 

@@ -112,3 +112,31 @@ printf '{"statusLine":{"type":"command","command":"/opt/somebody/bar.sh"}}\n' >"
 t_eq "a genuinely foreign status line is still foreign" "foreign" "$(selecta_sl_detect)"
 
 rm -rf "$SELECTA_HOME"
+
+# --- status must probe, not trust the file ----------------------------------
+# A state file saying "playing" with no live backend is stale, and reporting it
+# as playback is what made selecta look like it was working when it was not.
+# Literal source match, so the dollar signs must not expand.
+# shellcheck disable=SC2016
+t_eq "status probes the backend" "1" \
+	"$(grep -cF '_cs_live=$(live_backend)' "$SELECTA_ROOT/bin/selecta")"
+t_eq "status names stale state explicitly" "1" \
+	"$(grep -cF 'but no player is running, so it was stale' "$SELECTA_ROOT/bin/selecta")"
+
+# --- quota must be visible where it is spent --------------------------------
+t_eq "status shows remaining searches" "1" \
+	"$(grep -cF 'searches left today · replays and repeats are free' "$SELECTA_ROOT/bin/selecta")"
+t_eq "youtube play reports remaining searches" "1" \
+	"$(grep -cF 'in the selecta window · via YouTube · %s searches left today' "$SELECTA_ROOT/bin/selecta")"
+t_eq "player page shows remaining searches" "1" \
+	"$(grep -cF 'searches left today' "$SELECTA_ROOT/player/index.html")"
+t_eq "server exposes quota to the page" "1" \
+	"$(grep -cF '"quota": _quota()' "$SELECTA_ROOT/libexec/selecta-httpd")"
+
+# --- the repo link, in both surfaces ----------------------------------------
+t_eq "status links the repo" "1" \
+	"$(grep -cF 'SELECTA_REPO_URL' "$SELECTA_ROOT/bin/selecta")"
+t_eq "player page links the repo" "1" \
+	"$(grep -cF 'github.com/azandabot/selecta' "$SELECTA_ROOT/player/index.html")"
+t_eq "youtube attribution survives alongside it" "1" \
+	"$(grep -cF 'Music by YouTube' "$SELECTA_ROOT/player/index.html")"

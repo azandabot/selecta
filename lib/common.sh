@@ -10,7 +10,8 @@
 # shellcheck disable=SC2034
 
 SELECTA_VERSION=0.1.0
-SELECTA_USER_AGENT="selecta/$SELECTA_VERSION (+https://github.com/azandabot/selecta)"
+SELECTA_REPO_URL="https://github.com/azandabot/selecta"
+SELECTA_USER_AGENT="selecta/$SELECTA_VERSION (+$SELECTA_REPO_URL)"
 
 SELECTA_HOME=${SELECTA_HOME:-$HOME/.claude/selecta}
 SELECTA_RUN=$SELECTA_HOME/run
