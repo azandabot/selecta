@@ -90,7 +90,16 @@ t_eq "no bare echo to stdout in the supervisor" "0" \
 # The lock must be held by a real supervisor for this to be meaningful. A
 # hand-written lock file is correctly treated as stale and reaped, because
 # selecta_lock_reap_stale only honours locks whose owner is actually running.
-if command -v timeout >/dev/null 2>&1 && command -v mpv >/dev/null 2>&1; then
+# stock macOS has no timeout(1), so this gate silently skipped 8 of the 15
+# assertions on every macOS CI run. gtimeout comes with coreutils; failing that
+# a background kill does the same job.
+_tmo=''
+if command -v timeout >/dev/null 2>&1; then
+	_tmo=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+	_tmo=gtimeout
+fi
+if command -v mpv >/dev/null 2>&1; then
 	selecta_lock_release
 	SELECTA_AO=null "$SUP" --detached >/dev/null 2>&1 &
 	FIRST=$!
@@ -101,7 +110,14 @@ if command -v timeout >/dev/null 2>&1 && command -v mpv >/dev/null 2>&1; then
 	done
 
 	if [ -d "$SELECTA_LOCKDIR" ]; then
-		OUT=$(SELECTA_HOME=$SELECTA_HOME timeout 10 "$SUP" --monitor 2>&1)
+		if [ -n "$_tmo" ]; then
+			OUT=$(SELECTA_HOME=$SELECTA_HOME "$_tmo" 10 "$SUP" --monitor 2>&1)
+		else
+			OUT=$(SELECTA_HOME=$SELECTA_HOME "$SUP" --monitor 2>&1 &
+				_w=$!
+				(sleep 10 && kill "$_w" 2>/dev/null) &
+				wait "$_w" 2>/dev/null)
+		fi
 		RC=$?
 		t_eq "a losing supervisor exits 0" "0" "$RC"
 		t_empty "a losing supervisor prints nothing" "$OUT"

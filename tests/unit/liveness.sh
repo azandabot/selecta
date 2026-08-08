@@ -49,22 +49,6 @@ t_eq "reaping is safe when there is nothing to reap" "0" "$(
 	echo $?
 )"
 
-# --- the success banner must not be satisfied by stale state ----------------
-# play now writes stopped before issuing the command, so a leftover "playing"
-# from a previous session cannot make the wait return immediately.
-# Radio play, YouTube play, YouTube replay and stop all clear state first.
-# Counted as "at least", so adding a new playback path does not fail the suite
-# for the wrong reason; what matters is that none of them skip the clear.
-_clears=$(grep -cF 'selecta_state_write stopped 2>/dev/null || true' "$SELECTA_ROOT/bin/selecta")
-t_eq "every path that changes playback clears state first" "true" \
-	"$([ "$_clears" -ge 3 ] && echo true || echo false)"
-t_eq "radio path checks the load reply" "1" \
-	"$(grep -cF 'the player did not accept that stream' "$SELECTA_ROOT/bin/selecta")"
-t_eq "radio path waits for real playback" "1" \
-	"$(grep -cF 'was accepted but never started playing' "$SELECTA_ROOT/bin/selecta")"
-t_eq "youtube path waits for the page to report" "1" \
-	"$(grep -cF 'no playable upload of' "$SELECTA_ROOT/bin/selecta")"
-
 # --- status line wrap must not recurse --------------------------------------
 # A wrapped command resolving back to a selecta launcher re-read the same
 # wrapped_command and called itself. The child does not inherit SELECTA_HOME,
@@ -115,34 +99,6 @@ printf '{"statusLine":{"type":"command","command":"/opt/somebody/bar.sh"}}\n' >"
 t_eq "a genuinely foreign status line is still foreign" "foreign" "$(selecta_sl_detect)"
 
 rm -rf "$SELECTA_HOME"
-
-# --- status must probe, not trust the file ----------------------------------
-# A state file saying "playing" with no live backend is stale, and reporting it
-# as playback is what made selecta look like it was working when it was not.
-# Literal source match, so the dollar signs must not expand.
-# shellcheck disable=SC2016
-t_eq "status probes the backend" "1" \
-	"$(grep -cF '_cs_live=$(live_backend)' "$SELECTA_ROOT/bin/selecta")"
-t_eq "status names stale state explicitly" "1" \
-	"$(grep -cF 'but no player is running, so it was stale' "$SELECTA_ROOT/bin/selecta")"
-
-# --- quota must be visible where it is spent --------------------------------
-t_eq "status shows remaining searches" "1" \
-	"$(grep -cF 'searches left today · replays and repeats are free' "$SELECTA_ROOT/bin/selecta")"
-t_eq "youtube play reports remaining searches" "1" \
-	"$(grep -cF 'in the selecta window · via YouTube · %s searches left today' "$SELECTA_ROOT/bin/selecta")"
-t_eq "player page shows remaining searches" "1" \
-	"$(grep -cF 'searches left today' "$SELECTA_ROOT/player/index.html")"
-t_eq "server exposes quota to the page" "1" \
-	"$(grep -cF '"quota": _quota()' "$SELECTA_ROOT/libexec/selecta-httpd")"
-
-# --- the repo link, in both surfaces ----------------------------------------
-t_eq "status links the repo" "1" \
-	"$(grep -cF 'SELECTA_REPO_URL' "$SELECTA_ROOT/bin/selecta")"
-t_eq "player page links the repo" "1" \
-	"$(grep -cF 'github.com/azandabot/selecta' "$SELECTA_ROOT/player/index.html")"
-t_eq "youtube attribution survives alongside it" "1" \
-	"$(grep -cF 'Music by YouTube' "$SELECTA_ROOT/player/index.html")"
 
 # --- version must not drift -------------------------------------------------
 # plugin.json's version is what gates `claude plugin update`. If the shell

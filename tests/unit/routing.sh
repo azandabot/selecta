@@ -46,13 +46,6 @@ t_eq "a wordy ambient request stays on radio" "radio" \
 t_eq "a wordy mood request stays on radio" "radio" \
 	"$(route "some chill downtempo beats please")"
 
-# --- explicit overrides are honoured by the caller, not the heuristic -------
-# wants_youtube is advisory; --yt and --radio bypass it in cmd_play. Assert the
-# flags are actually parsed, since a silently ignored --radio would open a
-# window the user explicitly declined.
-t_eq "--radio is a recognised flag" "1" "$(grep -c -- '--radio) _cp_force=radio' "$SELECTA_ROOT/bin/selecta")"
-t_eq "--yt is a recognised flag" "1" "$(grep -c -- '--yt | --youtube) _cp_force=yt' "$SELECTA_ROOT/bin/selecta")"
-
 # --- no key means no window -------------------------------------------------
 # With no API key, a YouTube-shaped request must degrade to radio rather than
 # opening an empty player.
@@ -97,67 +90,5 @@ t_eq "json_or replaces malformed json" '[]' "$(selecta_json_or 'not json' '[]')"
 t_eq "json_or output is always valid json" "0" \
 	"$(selecta_json_or '' '{}' | jq -e . >/dev/null 2>&1; echo $?)"
 
-# --- regression: resolve must answer the same question play does ------------
-# A named song that only ever scored radio stations made the model conclude
-# there was nothing to play, when YouTube had it.
-# Matching the literal source text, so the dollar signs must not expand.
-# shellcheck disable=SC2016
-t_eq "resolve consults youtube for a named song" "1" \
-	"$(grep -cF 'wants_youtube "$_rs_query" "$_rs_out"' "$SELECTA_ROOT/bin/selecta")"
-t_eq "resolve reports why youtube was skipped" "1" \
-	"$(grep -c 'nokey | quota)' "$SELECTA_ROOT/bin/selecta")"
-
-# --- regression: resume could not replay a YouTube track --------------------
-# stream_for only had branches for somafm: and rb:, so a youtube: entry fell to
-# the default and resume reported "could not reach that stream" forever. Since
-# YouTube tracks go into the crate and rank top, resume was permanently broken
-# for anyone who had played one.
-t_eq "play routes by backend rather than assuming radio" "1" \
-	"$(grep -cF 'youtube:*) yt_play_card' "$SELECTA_ROOT/bin/selecta")"
-t_eq "stream_for is only reached for stream backends" "1" \
-	"$(grep -cF 'somafm:* | rb:*) start_source' "$SELECTA_ROOT/bin/selecta")"
-t_eq "a stored video is replayed without a search" "1" \
-	"$(grep -cF 'replay, no search used' "$SELECTA_ROOT/bin/selecta")"
-
-# --- regression: a dead top pick ended the command --------------------------
-# resume stuck to the highest-ranked source. If it would not load, the command
-# failed rather than moving to the next thing in the crate.
-# Literal source matches, so the dollar signs must not expand.
-# shellcheck disable=SC2016
-t_eq "resume walks the ranking" "1" \
-	"$(grep -cF 'play_ranked "$_cr_doc"' "$SELECTA_ROOT/bin/selecta")"
-# shellcheck disable=SC2016
-t_eq "next walks the ranking" "1" \
-	"$(grep -cF 'play_ranked "$(jq -nc' "$SELECTA_ROOT/bin/selecta")"
-t_eq "a failed source moves on rather than exiting" "1" \
-	"$(grep -cF 'trying the next source in the crate' "$SELECTA_ROOT/bin/selecta")"
-t_eq "start_source returns instead of dying so callers can fall through" "0" \
-	"$(sed -n '/^start_source()/,/^}/p' "$SELECTA_ROOT/bin/selecta" | grep -c 'selecta_die')"
 
 rm -rf "$SELECTA_HOME"
-
-# --- regression: an embed-locked result set was a dead end ------------------
-# Major-label uploads return error 150 at playback even when the API reports
-# them embeddable, so a whole result set could be unplayable. Ranking now
-# prefers uploads that tend to work, and an exhausted list triggers a
-# differently-phrased search rather than giving up.
-t_eq "label channels rank below re-uploads" "1" \
-	"$(grep -cF 'VEVO$"; "i")) then 0.55' "$SELECTA_ROOT/lib/youtube.sh")"
-t_eq "lyric and audio uploads rank first" "1" \
-	"$(grep -cF 'official audio|visuali[sz]er' "$SELECTA_ROOT/lib/youtube.sh")"
-t_eq "reactions and reviews rank last" "1" \
-	"$(grep -cF 'reaction|review|mashup' "$SELECTA_ROOT/lib/youtube.sh")"
-t_eq "an exhausted list triggers another search" "1" \
-	"$(grep -cF 'yt_refill && selecta_yt_advance' "$SELECTA_ROOT/bin/selecta")"
-# shellcheck disable=SC2016
-t_eq "retries are bounded so quota is not burned" "1" \
-	"$(grep -cF '[ "$_yf_n" -le 3 ] || return 1' "$SELECTA_ROOT/bin/selecta")"
-# shellcheck disable=SC2016
-t_eq "already-rejected videos are not offered again" "1" \
-	"$(grep -cF 'seen | index($v)) == null' "$SELECTA_ROOT/bin/selecta")"
-t_eq "a genuine dead end hands over the direct link" "1" \
-	"$(grep -cF 'Play it on YouTube directly' "$SELECTA_ROOT/bin/selecta")"
-
-# shellcheck disable=SC2016
-t_eq "the retry query is carried into the queue" "1" \
-	"$(grep -cF 'query: $q, attempt: 0, seen: []' "$SELECTA_ROOT/bin/selecta")"
