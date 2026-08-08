@@ -1,0 +1,17 @@
+{
+  "name": "azandabot-selecta",
+  "owner": {
+    "name": "Azanda",
+    "url": "https://github.com/azandabot"
+  },
+  "description": "selecta and friends.",
+  "plugins": [
+    {
+      "name": "selecta",
+      "source": "./",
+      "description": "Background music for your coding sessions, in the terminal. Every repository builds its own soundtrack.",
+      "category": "creative-media",
+      "tags": ["music", "radio", "statusline", "focus"]
+    }
+  ]
+}

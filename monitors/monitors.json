@@ -1,0 +1,8 @@
+[
+  {
+    "name": "selecta-player",
+    "command": "\"${CLAUDE_PLUGIN_ROOT}\"/libexec/selecta-supervisor --monitor",
+    "description": "selecta background music player",
+    "when": "on-skill-invoke:selecta"
+  }
+]

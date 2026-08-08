@@ -1,0 +1,187 @@
+#!/bin/sh
+# selecta command-line entry point.
+#
+# This is a THIN CLIENT. It never writes to durable state. Every mutation is
+# sent over the control socket to libexec/selecta-supervisor, which runs
+# unsandboxed as a plugin monitor and owns all writes. That split is what keeps
+# the tool working under the macOS sandbox instead of fighting it.
+
+set -eu
+
+SELECTA_BIN=$0
+case $SELECTA_BIN in
+*/*) ;;
+*) SELECTA_BIN=$(command -v -- "$SELECTA_BIN") ;;
+esac
+while [ -L "$SELECTA_BIN" ]; do
+	_link=$(readlink -- "$SELECTA_BIN")
+	case $_link in
+	/*) SELECTA_BIN=$_link ;;
+	*) SELECTA_BIN=$(dirname -- "$SELECTA_BIN")/$_link ;;
+	esac
+done
+SELECTA_ROOT=$(cd -- "$(dirname -- "$SELECTA_BIN")/.." && pwd -P)
+export SELECTA_ROOT
+
+# shellcheck source=lib/common.sh
+. "$SELECTA_ROOT/lib/common.sh"
+# shellcheck source=lib/repo.sh
+. "$SELECTA_ROOT/lib/repo.sh"
+# shellcheck source=lib/resolve.sh
+. "$SELECTA_ROOT/lib/resolve.sh"
+
+usage() {
+	cat <<'EOF'
+selecta - background music for your coding sessions
+
+  selecta                       what is playing, and this repo's crate
+  selecta play [mood]           resolve and play; no argument resumes this repo
+  selecta resume                this repo's top-ranked source
+  selecta pause | go            pause, unpause
+  selecta next                  next source in this repo's rotation
+  selecta stop                  stop playback, keep state
+  selecta vol <0-100|+10|-10|mute>
+
+  selecta crate                 what this repo sounds like
+  selecta history [n]           tracks, grouped by the commit they scored
+  selecta pin|ban|forget [src]  curate this repo's crate
+  selecta stations [query]      browse the catalog without playing
+
+  selecta statusline on|off|status
+  selecta doctor                dependency and health check
+  selecta export [path]         write this crate as .m3u8 + .json
+  selecta config [key [value]]
+  selecta uninstall [--purge]
+
+Music comes from SomaFM, radio-browser, Jamendo and the Internet Archive
+netlabels collection. Nothing is downloaded and no account is required.
+EOF
+}
+
+# Aliases are resolved silently. Anything a user would plausibly type for an
+# action we already have should reach that action rather than an error.
+canonicalize() {
+	case $1 in
+	quiet) echo stop ;;
+	skip) echo next ;;
+	unpause | play-pause) echo go ;;
+	here | soundtrack) echo crate ;;
+	volume) echo vol ;;
+	status) echo '' ;;
+	*) echo "$1" ;;
+	esac
+}
+
+# A mistyped subcommand must never fall through to playback. "Explicit only"
+# is a promise about audio, and guessing here would break it.
+unknown_subcommand() {
+	_us_cmd=$1
+	case $_us_cmd in
+	lofi | jazz | ambient | amapiano | chill | focus | drone | synthwave | classical | house)
+		printf 'selecta: unknown command "%s". Did you mean: selecta play %s\n' \
+			"$_us_cmd" "$_us_cmd" >&2
+		;;
+	*)
+		printf 'selecta: unknown command "%s". Try: selecta play %s\n' \
+			"$_us_cmd" "$_us_cmd" >&2
+		printf 'Run "selecta --help" for the full list.\n' >&2
+		;;
+	esac
+	exit "$EX_USAGE"
+}
+
+stub() {
+	printf 'cmd=%s args=%s\n' "$1" "${2-}"
+}
+
+# selecta resolve [--json] [--offline] <free text>
+#
+# The machine-readable half of the natural-language path. SKILL.md tells the
+# model to call this and act on `status`, never to invent a stream URL.
+cmd_resolve() {
+	_rs_json=0
+	_rs_query=''
+	for _rs_a in "$@"; do
+		case $_rs_a in
+		--json) _rs_json=1 ;;
+		--offline) SELECTA_OFFLINE=1 ;;
+		--*)
+			printf 'selecta: unknown option %s\n' "$_rs_a" >&2
+			exit "$EX_USAGE"
+			;;
+		*) _rs_query="$_rs_query${_rs_query:+ }$_rs_a" ;;
+		esac
+	done
+	export SELECTA_OFFLINE
+
+	[ -n "$_rs_query" ] || selecta_die "$EX_USAGE" "resolve needs something to look for"
+	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+
+	_rs_out=$(selecta_resolve "$_rs_query") ||
+		selecta_die "$EX_NOTFOUND" "resolver failed for \"$_rs_query\""
+
+	if [ "$_rs_json" -eq 1 ]; then
+		printf '%s\n' "$_rs_out"
+		return 0
+	fi
+
+	_rs_status=$(printf '%s' "$_rs_out" | jq -r '.status')
+	case $_rs_status in
+	none)
+		printf 'Nothing matched "%s".\nTry: selecta stations\n' "$_rs_query" >&2
+		exit "$EX_NOTFOUND"
+		;;
+	esac
+	printf '%s' "$_rs_out" | jq -r '
+		"\(.status)  (confidence \(.confidence))",
+		(if (.hint_tags|length) > 0 then "tags: " + (.hint_tags|join(", ")) else empty end),
+		"",
+		(.candidates[] | "  \(.score)  \(.id)\n        \(.title) — \(.genre)  [\(.why)]")'
+}
+
+main() {
+	if [ $# -eq 0 ]; then
+		set -- status
+	fi
+
+	case $1 in
+	-h | --help | help)
+		usage
+		exit "$EX_OK"
+		;;
+	-V | --version | version)
+		printf 'selecta %s\n' "$SELECTA_VERSION"
+		exit "$EX_OK"
+		;;
+	esac
+
+	cmd=$(canonicalize "$1")
+	shift
+	args=$*
+
+	case $cmd in
+	'' | status) stub status "$args" ;;
+	play) stub play "$args" ;;
+	resume) stub resume "$args" ;;
+	pause) stub pause "$args" ;;
+	go) stub go "$args" ;;
+	next) stub next "$args" ;;
+	stop) stub stop "$args" ;;
+	vol) stub vol "$args" ;;
+	crate) stub crate "$args" ;;
+	history) stub history "$args" ;;
+	pin) stub pin "$args" ;;
+	ban) stub ban "$args" ;;
+	forget) stub forget "$args" ;;
+	stations) stub stations "$args" ;;
+	statusline) stub statusline "$args" ;;
+	doctor) stub doctor "$args" ;;
+	export) stub export "$args" ;;
+	config) stub config "$args" ;;
+	resolve) cmd_resolve "$@" ;;
+	uninstall) stub uninstall "$args" ;;
+	*) unknown_subcommand "$cmd" ;;
+	esac
+}
+
+main "$@"

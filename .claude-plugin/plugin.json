@@ -1,0 +1,31 @@
+{
+  "name": "selecta",
+  "displayName": "selecta",
+  "version": "0.1.0",
+  "description": "Background music for your coding sessions, in the terminal. Every repository builds its own soundtrack.",
+  "author": {
+    "name": "Azanda",
+    "url": "https://github.com/azandabot"
+  },
+  "homepage": "https://github.com/azandabot/selecta",
+  "repository": "https://github.com/azandabot/selecta",
+  "license": "MIT",
+  "keywords": [
+    "music",
+    "radio",
+    "statusline",
+    "focus",
+    "somafm",
+    "creative-commons"
+  ],
+  "userConfig": {
+    "jamendo_client_id": {
+      "type": "string",
+      "title": "Jamendo client ID (optional)",
+      "description": "Free key from https://devportal.jamendo.com that enables text search over Creative Commons tracks. Leave blank: SomaFM and radio-browser need no key.",
+      "required": false,
+      "sensitive": false,
+      "default": ""
+    }
+  }
+}

@@ -1,0 +1,2 @@
+# local(1) is not in POSIX but every real /bin/sh (dash, bash, ash, ksh) implements it.
+disable=SC3043
