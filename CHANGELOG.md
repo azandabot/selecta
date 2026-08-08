@@ -19,9 +19,10 @@ Two things need action:
 - **YouTube moved to its own plugin.** `/plugin install
   selecta-youtube@azandabot-selecta`. Named tracks already in your crates keep
   playing once it is installed; without it selecta says so and plays radio.
-- **The marketplace source path changed** from `./` to `./plugins/selecta`. If
-  `claude plugin update` does not pick up 0.3.0, remove and re-add the
-  marketplace.
+- **The marketplace source path changed** from `./` to `./plugins/selecta`.
+  Verified: `claude plugin marketplace update` followed by `claude plugin
+  update selecta@azandabot-selecta` upgrades 0.2.0 to 0.3.0 across the change.
+  No uninstall or re-add needed. Restart the session afterwards.
 
 `selecta play --yt` still works and now routes to the plugin.
 
