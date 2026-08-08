@@ -135,3 +135,29 @@ t_eq "start_source returns instead of dying so callers can fall through" "0" \
 	"$(sed -n '/^start_source()/,/^}/p' "$SELECTA_ROOT/bin/selecta" | grep -c 'selecta_die')"
 
 rm -rf "$SELECTA_HOME"
+
+# --- regression: an embed-locked result set was a dead end ------------------
+# Major-label uploads return error 150 at playback even when the API reports
+# them embeddable, so a whole result set could be unplayable. Ranking now
+# prefers uploads that tend to work, and an exhausted list triggers a
+# differently-phrased search rather than giving up.
+t_eq "label channels rank below re-uploads" "1" \
+	"$(grep -cF 'VEVO$"; "i")) then 0.55' "$SELECTA_ROOT/lib/youtube.sh")"
+t_eq "lyric and audio uploads rank first" "1" \
+	"$(grep -cF 'official audio|visuali[sz]er' "$SELECTA_ROOT/lib/youtube.sh")"
+t_eq "reactions and reviews rank last" "1" \
+	"$(grep -cF 'reaction|review|mashup' "$SELECTA_ROOT/lib/youtube.sh")"
+t_eq "an exhausted list triggers another search" "1" \
+	"$(grep -cF 'yt_refill && selecta_yt_advance' "$SELECTA_ROOT/bin/selecta")"
+# shellcheck disable=SC2016
+t_eq "retries are bounded so quota is not burned" "1" \
+	"$(grep -cF '[ "$_yf_n" -le 3 ] || return 1' "$SELECTA_ROOT/bin/selecta")"
+# shellcheck disable=SC2016
+t_eq "already-rejected videos are not offered again" "1" \
+	"$(grep -cF 'seen | index($v)) == null' "$SELECTA_ROOT/bin/selecta")"
+t_eq "a genuine dead end hands over the direct link" "1" \
+	"$(grep -cF 'Play it on YouTube directly' "$SELECTA_ROOT/bin/selecta")"
+
+# shellcheck disable=SC2016
+t_eq "the retry query is carried into the queue" "1" \
+	"$(grep -cF 'query: $q, attempt: 0, seen: []' "$SELECTA_ROOT/bin/selecta")"

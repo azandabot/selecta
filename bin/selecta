@@ -386,6 +386,7 @@ cmd_play() {
 		_cp_yt=$(selecta_yt_resolve "$_cp_q")
 		case $(printf '%s' "$_cp_yt" | jq -r .status) in
 		ok)
+			_yt_query=$_cp_q
 			yt_start "$(printf '%s' "$_cp_yt" | jq -c .candidates)"
 			return 0
 			;;
@@ -855,11 +856,42 @@ selecta_yt_advance() {
 	_ya_next=$(jq -c '.candidates[0] // empty' "$_ya_f" 2>/dev/null)
 	[ -n "$_ya_next" ] || return 1
 	_ya_repo=$(jq -c '.repo // {}' "$_ya_f" 2>/dev/null)
-	jq -c '.candidates |= .[1:]' "$_ya_f" | selecta_atomic_write "$_ya_f"
+	jq -c --arg id "$(printf '%s' "$_ya_next" | jq -r .videoId)" \
+		'.candidates |= .[1:] | .seen += [$id]' "$_ya_f" | selecta_atomic_write "$_ya_f"
 
 	yt_queue_cmd "$(printf '%s' "$_ya_next" | jq -c --argjson repo "$_ya_repo" '{
 		action: "load", videoId: .videoId, title: .title,
 		artist: .artist, sourceId: .id, repo: $repo}')"
+	return 0
+}
+
+# Every candidate came back embed-locked. Rather than giving up, search again
+# with a phrasing that surfaces re-uploads: lyric videos and audio-only posts
+# of the same song are rarely restricted, where the label's own upload almost
+# always is.
+yt_refill() {
+	_yf_f=$SELECTA_RUN/yt-queue.json
+	[ -s "$_yf_f" ] || return 1
+	_yf_q=$(jq -r '.query // ""' "$_yf_f" 2>/dev/null)
+	_yf_n=$(jq -r '.attempt // 0' "$_yf_f" 2>/dev/null)
+	[ -n "$_yf_q" ] || return 1
+	_yf_n=$((_yf_n + 1))
+	# Bounded: each retry is a search, and searches are the scarce resource.
+	[ "$_yf_n" -le 3 ] || return 1
+
+	_yf_new=$(selecta_yt_alt_search "$_yf_q" "$_yf_n") || return 1
+	[ -n "$_yf_new" ] || return 1
+
+	# Anything already rejected is dropped, or the same dead video comes back.
+	_yf_merged=$(jq -nc --argjson new "$_yf_new" --slurpfile old "$_yf_f" '
+		($old[0].seen // []) as $seen
+		| [ $new[] | select((.videoId as $v | $seen | index($v)) == null) ]')
+	[ "$(printf '%s' "$_yf_merged" | jq 'length')" -gt 0 ] || return 1
+
+	jq -c --argjson c "$_yf_merged" --argjson n "$_yf_n" \
+		'.candidates = $c | .attempt = $n' "$_yf_f" | selecta_atomic_write "$_yf_f"
+	selecta_log info "yt: all candidates were embed-locked, retrying as \"$_yf_q $(printf '%s' "$SELECTA_YT_FALLBACKS" | cut -d"|" -f"$_yf_n")\""
+	printf '  every upload of that was embed-locked; looking for another version…\n' >&2
 	return 0
 }
 
@@ -870,7 +902,9 @@ yt_start() {
 	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
 	jq -nc --argjson c "$(selecta_json_or "$_yt_cands" '[]')" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
-		'{candidates: $c, repo: $repo}' | selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
+		--arg q "${_yt_query:-}" \
+		'{candidates: $c, repo: $repo, query: $q, attempt: 0, seen: []}' |
+		selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
 	yt_ensure_window || return 1
 	# Stale state would otherwise satisfy the wait below immediately, and the
 	# banner would report the previous track as if it were this one.
@@ -882,10 +916,17 @@ yt_start() {
 		printf '  in the selecta window · via YouTube · %s searches left today\n' \
 			"$(selecta_yt_quota_left)"
 	else
-		printf 'selecta: queued "%s" but the player never reported back.\n' \
-			"$(printf '%s' "$_yt_cands" | jq -r '.[0].title')" >&2
-		printf 'If you closed the selecta window, run the same command again.\n' >&2
-		printf 'Otherwise: selecta doctor\n' >&2
+		# A dead end should still be useful. The rights holder has blocked
+		# every upload we could find, which no amount of retrying fixes, so
+		# hand over the link and a way to keep listening.
+		printf 'selecta: no playable upload of "%s".\n' "${_yt_query:-that}" >&2
+		printf 'The rights holder has embedding disabled on every version found\n' >&2
+		printf 'after %s searches. This is common for major-label releases.\n' \
+			"$(jq -r '.attempt // 0' "$SELECTA_RUN/yt-queue.json" 2>/dev/null)" >&2
+		_yt_best=$(printf '%s' "$_yt_cands" | jq -r '.[0].videoId // empty')
+		[ -n "$_yt_best" ] &&
+			printf '\nPlay it on YouTube directly:\n  https://youtu.be/%s\n' "$_yt_best" >&2
+		printf '\nOr keep something on:  selecta play <the artist or a mood>\n' >&2
 		exit "$EX_NETWORK"
 	fi
 }
@@ -933,7 +974,10 @@ cmd_yt_state() {
 			selecta_log info "yt: skipped $_ys_code, trying next candidate"
 			return 0
 		fi
-		selecta_log warn "yt: no embeddable candidate left"
+		if yt_refill && selecta_yt_advance; then
+			return 0
+		fi
+		selecta_log warn "yt: no embeddable candidate left after retries"
 		;;
 	esac
 

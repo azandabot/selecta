@@ -94,22 +94,37 @@ selecta_yt_search() {
 	_ys_det=$(curl -sS --max-time 15 -A "$SELECTA_USER_AGENT" \
 		"https://www.googleapis.com/youtube/v3/videos?part=status,snippet,contentDetails&id=$_ys_ids&key=$_ys_key" 2>/dev/null)
 
+	# Ranked by how likely the upload is to actually play, not just by
+	# relevance. status.embeddable can be true while the rights holder still
+	# blocks playback with error 150, and that is near-universal for label
+	# channels. Lyric and audio re-uploads of the same song almost always work,
+	# so they are tried first rather than only after the official one fails.
 	_ys_out=$(printf '%s' "$_ys_det" | jq -c --arg q "$_ys_q" '
 		[ .items[]?
 		  | select(.status.embeddable == true)
 		  | select(.status.privacyStatus == "public")
+		  | (.snippet.channelTitle // "") as $chan
+		  | (.snippet.title // "") as $t
+		  # Reactions, reviews and mashups are not the song. They rank below
+		  # everything else rather than being excluded, so they remain a last
+		  # resort when literally nothing else will play.
+		  | (if ($t | test("reaction|review|mashup|explained|breakdown|interview"; "i")) then 0.2
+			 elif ($chan | test("VEVO$"; "i")) then 0.55
+			 elif ($t | test("lyric|official audio|visuali[sz]er"; "i")) then 0.95
+			 elif ($chan | test("- Topic$")) then 0.9
+			 else 0.8 end) as $sc
 		  | { id: ("youtube:" + .id),
 			  kind: "track", provider: "youtube",
 			  videoId: .id,
-			  title: (.snippet.title // ""),
-			  artist: (.snippet.channelTitle // ""),
+			  title: $t,
+			  artist: $chan,
 			  genre: "",
-			  description: (.snippet.channelTitle // ""),
+			  description: $chan,
 			  duration: (.contentDetails.duration // ""),
-			  score: 0.9,
+			  score: $sc,
 			  why: ("youtube: " + $q),
 			  resolver: {type: "youtube", id: .id, query: $q} } ]
-		| .[0:8]' 2>/dev/null)
+		| sort_by(-.score) | .[0:10]' 2>/dev/null)
 
 	[ -n "$_ys_out" ] && [ "$(printf '%s' "$_ys_out" | jq 'length')" -gt 0 ] || return 1
 
@@ -145,4 +160,19 @@ selecta_yt_resolve() {
 	printf '%s' "$_yr_c" | jq -c --arg q "$_yr_q" \
 		'{status:"ok", confidence:(.[0].score // 0), query:$q, normalized:$q,
 		  hint_tags:[], candidates:.}'
+}
+
+# Phrasings that surface re-uploads rather than the label's own copy. Tried in
+# order when a whole result set comes back embed-locked, which is what happens
+# for most major-label releases.
+SELECTA_YT_FALLBACKS="lyrics|audio|lyric video"
+
+# selecta_yt_alt_search <query> <attempt-number>
+# Returns a fresh candidate array, or non-zero when the phrasings run out.
+selecta_yt_alt_search() {
+	_ya_q=$1
+	_ya_n=${2:-1}
+	_ya_mod=$(printf '%s' "$SELECTA_YT_FALLBACKS" | cut -d'|' -f"$_ya_n")
+	[ -n "$_ya_mod" ] || return 1
+	selecta_yt_search "$_ya_q $_ya_mod"
 }

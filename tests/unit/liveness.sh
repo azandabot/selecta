@@ -63,7 +63,7 @@ t_eq "radio path checks the load reply" "1" \
 t_eq "radio path waits for real playback" "1" \
 	"$(grep -cF 'was accepted but never started playing' "$SELECTA_ROOT/bin/selecta")"
 t_eq "youtube path waits for the page to report" "1" \
-	"$(grep -cF 'but the player never reported back' "$SELECTA_ROOT/bin/selecta")"
+	"$(grep -cF 'no playable upload of' "$SELECTA_ROOT/bin/selecta")"
 
 # --- status line wrap must not recurse --------------------------------------
 # A wrapped command resolving back to a selecta launcher re-read the same
