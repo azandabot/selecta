@@ -295,6 +295,22 @@ selecta_window_up() {
 	awk -v a="$_wu_age" 'BEGIN { exit !(a < 5) }'
 }
 
+# The player window is a singleton. Each play used to launch another one:
+# when the server restarts it binds a new port, so pages from a previous run
+# poll an address that no longer answers, stop reporting, and are treated as
+# gone while their windows stay on screen. They accumulate until the machine
+# slows down.
+#
+# Matched on the dedicated profile directory, which no process outside this
+# plugin passes, so this can never reach the user's own browser.
+selecta_yt_window_close() {
+	_wc_prof=$SELECTA_HOME/browser
+	selecta_have pkill || return 0
+	pkill -f -- "--user-data-dir=$_wc_prof" 2>/dev/null || true
+	rm -f "$SELECTA_RUN/yt-cmd.json" 2>/dev/null || true
+	return 0
+}
+
 # Never globs the versioned plugin cache path. The pointer is written by
 # selecta-youtube on every run, exactly as selecta writes its own.
 selecta_yt_bin() {

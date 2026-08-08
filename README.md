@@ -234,9 +234,12 @@ Stated plainly, because finding these out yourself is worse.
   host, which has no speakers, and there's no local music app to read.
 - **selecta can see Spotify and Apple Music, but not control them.** `pause` and
   `vol` reach selecta's own playback and the YouTube window. It says so rather
-  than silently doing nothing.
+  than silently doing nothing. The one exception: starting selecta pauses
+  whatever is already playing, so you never get two streams at once. Turn that
+  off with `selecta config playback.pause_others false`.
 - **YouTube mode always shows a window.** Required by YouTube's policies, not a
-  design choice.
+  design choice. It is a singleton: playing something else reuses or replaces
+  it, and `selecta stop` closes it.
 - **Some official uploads refuse embedded playback.** selecta skips to the next
   candidate, which can mean a re-upload or lyric video instead of the official
   one. When everything is blocked it hands you the direct link.

@@ -22,4 +22,9 @@ if ps -o command= -p "$_pid" 2>/dev/null | grep -q 'selecta-supervisor'; then
 	kill "$_pid" 2>/dev/null
 fi
 
+# The player window is a browser process, not a child of the supervisor, so
+# nothing else reaps it. Matched on the dedicated profile directory, which no
+# process outside this plugin passes.
+pkill -f -- "--user-data-dir=$SELECTA_HOME/browser" 2>/dev/null || true
+
 exit 0

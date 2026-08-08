@@ -176,6 +176,7 @@ cmd_play() {
 yt_start() {
 	_yt_cands=$1
 	_yt_query=${2:-}
+	selecta_np_pause_others
 	jq -nc --argjson c "$(selecta_json_or "$_yt_cands" '[]')" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		--arg q "$_yt_query" \
@@ -219,6 +220,7 @@ cmd_replay() {
 		return "$EX_NOTFOUND"
 	fi
 	selecta_ensure_dirs || return "$EX_UNWRITABLE"
+	selecta_np_pause_others
 	jq -nc --argjson c "[$(printf '%s' "$_cr_card" | jq -c --arg v "$_cr_vid" '. + {videoId: $v}')]" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		'{candidates: $c, repo: $repo, query: "", attempt: 0, seen: []}' |

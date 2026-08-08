@@ -48,6 +48,22 @@ Two things need action:
   which its own header calls the reason selecta exists, had no coverage at all.
 
 ### Fixed
+- **Starting selecta while Spotify or Apple Music was playing gave you both at
+  once.** Nothing in the audio stack prevents that. selecta now pauses what is
+  already playing before it starts, behind the same `pgrep` gate as the probe
+  so it can never launch a closed app. `playback.pause_others` turns it off.
+- **The player window was not a singleton.** A page whose server has restarted
+  polls a port that no longer answers, so it stops reporting and is treated as
+  gone while its window stays on screen. Every play opened another one until
+  the machine slowed down. Windows are now closed before a replacement opens,
+  by `selecta stop`, and at session end. Matched on the dedicated profile
+  directory, so it can never reach the user's own browser.
+- **The status line named the wrong player during YouTube playback.** The probe
+  knew about mpv and nothing else, so it fell through to whatever music app was
+  open while selecta was the one making noise.
+- **`selecta stop` exited 1 and printed nothing when no window was open**,
+  because `pkill` exits 1 when nothing matches and `set -eu` took the command
+  down with it.
 - **`statusline on` could never succeed through an agent.** It called `read`
   with no TTY, which under `set -e` killed the script mid-command. The no-flag
   invocation is now a dry run that writes nothing and exits 7; `--user-confirmed`

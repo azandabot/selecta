@@ -103,9 +103,66 @@ _np_linux() {
 	printf '%s\n' "$_np_l"
 }
 
+# --- getting out of the way ----------------------------------------------------
+#
+# Starting selecta while Spotify or Apple Music is playing used to give you
+# both at once. Nothing in the audio stack prevents that: two processes, two
+# streams, one pair of speakers.
+#
+# So selecta pauses what is already playing before it starts. Pause, never
+# stop: the user gets their position back with one press in their own app.
+# Same pgrep gate as the probe, so this can never launch an app that was
+# closed, and same TCC latch, so a refused Automation prompt is not re-asked
+# every time.
+#
+# Set playback.pause_others to false to keep both.
+selecta_np_pause_others() {
+	[ "$(selecta_cfg_get '.playback.pause_others' true)" = false ] && return 0
+	case $(uname -s) in
+	Darwin)
+		[ "$(selecta_cfg_get '.nowplaying.macos_automation' '""' | tr -d '"')" = denied ] &&
+			return 0
+		selecta_have osascript || return 0
+		selecta_have pgrep || return 0
+		for _po in "Spotify:Spotify" "Music:Music"; do
+			_po_proc=${_po%%:*}
+			_po_app=${_po#*:}
+			pgrep -x "$_po_proc" >/dev/null 2>&1 || continue
+			osascript >/dev/null 2>&1 <<AS
+with timeout of 2 seconds
+	tell application "$_po_app"
+		try
+			if player state is playing then pause
+		end try
+	end tell
+end timeout
+AS
+		done
+		;;
+	Linux)
+		# -a would also pause the browser tab the user is reading, so this
+		# only reaches players that are actually playing audio.
+		selecta_have playerctl || return 0
+		playerctl -a pause >/dev/null 2>&1 || true
+		;;
+	esac
+	return 0
+}
+
 # --- our own player ----------------------------------------------------------
 # Ranked first: if the user started radio from this session and also has
 # Spotify paused in the background, ours is the one they were controlling.
+_np_youtube() {
+	selecta_have jq || return 1
+	selecta_window_up 2>/dev/null || return 1
+	[ -s "$SELECTA_STATE" ] || return 1
+	jq -r 'if (.source.provider // "") != "youtube" then empty
+		elif (.status // "") == "playing" or (.status // "") == "paused"
+		then [.status, (.now.artist // ""), (.now.title // .source.title // ""), "YouTube"]
+			| @tsv
+		else empty end' "$SELECTA_STATE" 2>/dev/null | grep . || return 1
+}
+
 _np_selecta() {
 	selecta_ipc_up 2>/dev/null || return 1
 	_np_paused=$(selecta_ipc_get pause 2>/dev/null)
@@ -138,6 +195,7 @@ _np_selecta() {
 selecta_np_probe() {
 	[ "$(selecta_cfg_get '.nowplaying.disabled' false)" = true ] && return 1
 	_np_selecta && return 0
+	_np_youtube && return 0
 	case $(uname -s) in
 	Darwin) _np_darwin && return 0 ;;
 	Linux) _np_linux && return 0 ;;

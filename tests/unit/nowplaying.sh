@@ -101,6 +101,72 @@ t_eq "the disable flag stops the probe" "1" "$(
 )"
 selecta_cfg_set '.nowplaying.disabled' false
 
+# --- selecta's own playback wins over the app you left open ---------------------
+# With a YouTube track playing, the probe knew about mpv and nothing else, so
+# it fell through to whatever music app was open and the bar named the wrong
+# thing while selecta was the one making noise.
+mkstub uname 'printf "Darwin\n"'
+mkstub pgrep 'exit 0'
+mkstub osascript 'printf "playing\tApple Music Artist\tApple Music Track\n"'
+printf '{"origin":"http://127.0.0.1:1","url":"x"}\n' >"$SELECTA_RUN/httpd.json"
+mkstub curl 'printf "{\"ok\":true,\"page_age\":0.2}\n"'
+printf '%s\n' '{"status":"playing","source":{"provider":"youtube","title":"T"},
+	"now":{"artist":"Kabza De Small","title":"Sponono"}}' >"$SELECTA_STATE"
+
+_y=$(probe)
+t_eq "the youtube window beats the music app" "Kabza De Small" "$(field "$_y" 2)"
+t_eq "and is labelled as youtube" "YouTube" "$(field "$_y" 4)"
+
+# Paused in the window is still ours; the app must not take the line back.
+printf '%s\n' '{"status":"paused","source":{"provider":"youtube","title":"T"},
+	"now":{"artist":"Kabza De Small","title":"Sponono"}}' >"$SELECTA_STATE"
+t_eq "a paused youtube track is still ours" "paused" "$(field "$(probe)" 1)"
+
+# Stopped is not ours any more, so the app should come back.
+printf '%s\n' '{"status":"stopped","source":{"provider":"youtube","title":"T"},"now":null}' \
+	>"$SELECTA_STATE"
+t_eq "once stopped the music app takes the line back" "Apple Music Artist" \
+	"$(field "$(probe)" 2)"
+
+# A dead window must not hold the line against a live app.
+mkstub curl 'exit 1'
+printf '%s\n' '{"status":"playing","source":{"provider":"youtube","title":"T"},
+	"now":{"artist":"Kabza De Small","title":"Sponono"}}' >"$SELECTA_STATE"
+t_eq "a closed window releases the line" "Apple Music Artist" "$(field "$(probe)" 2)"
+rm -f "$SELECTA_RUN/httpd.json" "$STUB/curl"
+: >"$SELECTA_STATE"
+
+# --- getting out of the way -----------------------------------------------------
+# Two players, two streams, one pair of speakers. selecta pauses what is
+# already going before it starts.
+: >"$CALLS"
+mkstub pgrep 'exit 1'
+mkstub osascript 'printf ""'
+selecta_np_pause_others
+t_eq "a closed app is never told to pause, which would launch it" "0" \
+	"$(grep -c '^osascript$' "$CALLS" || true)"
+
+: >"$CALLS"
+mkstub pgrep 'exit 0'
+PATH="$STUB:$PATH" selecta_np_pause_others
+t_eq "a running app is asked to pause" "true" \
+	"$([ "$(grep -c '^osascript$' "$CALLS" || echo 0)" -gt 0 ] && echo true || echo false)"
+
+: >"$CALLS"
+selecta_cfg_set '.playback.pause_others' false
+PATH="$STUB:$PATH" selecta_np_pause_others
+t_eq "the opt-out is honoured" "0" "$(grep -c '^osascript$' "$CALLS" || true)"
+selecta_cfg_set '.playback.pause_others' true
+
+# A refused Automation prompt must not be re-asked on every play.
+: >"$CALLS"
+selecta_cfg_set '.nowplaying.macos_automation' '"denied"'
+PATH="$STUB:$PATH" selecta_np_pause_others
+t_eq "a denied prompt is not re-asked when pausing" "0" \
+	"$(grep -c '^osascript$' "$CALLS" || true)"
+selecta_cfg_set '.nowplaying.macos_automation' 'null'
+rm -f "$STUB/uname" "$STUB/pgrep" "$STUB/osascript"
+
 # --- Linux -------------------------------------------------------------------
 mkstub uname 'printf "Linux\n"'
 rm -f "$STUB/osascript" "$STUB/pgrep"

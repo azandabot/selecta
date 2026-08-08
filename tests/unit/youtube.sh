@@ -109,6 +109,41 @@ t_eq "an httpd.json with no origin means no window" "1" "$(
 	echo $?
 )"
 
+# --- the window is a singleton ---------------------------------------------
+# Each play used to launch another browser window, because a page whose server
+# has restarted polls a port that no longer answers and is treated as gone
+# while its window stays on screen. They accumulated until the machine slowed.
+#
+# A real process is used, with the same argument shape a browser gets, because
+# the selector is the thing under test: it must reach ours and nothing else.
+PROF=$SELECTA_HOME/browser
+sh -c 'sleep 30; :' fake-browser --user-data-dir="$PROF" &
+OURS=$!
+sh -c 'sleep 30; :' fake-browser --user-data-dir=/some/other/browser &
+THEIRS=$!
+sleep 0.5
+
+selecta_yt_window_close
+sleep 0.5
+t_eq "our player window is closed" "gone" \
+	"$(kill -0 "$OURS" 2>/dev/null && echo alive || echo gone)"
+t_eq "a browser that is not ours is untouched" "alive" \
+	"$(kill -0 "$THEIRS" 2>/dev/null && echo alive || echo gone)"
+kill "$THEIRS" 2>/dev/null
+wait "$OURS" "$THEIRS" 2>/dev/null || true
+
+# pkill exits 1 when nothing matches, which is the normal case. Under set -eu
+# that took `selecta stop` down with it.
+t_eq "closing nothing still succeeds" "0" "$(
+	selecta_yt_window_close
+	echo $?
+)"
+t_eq "closing drops any queued command" "0" "$(
+	selecta_yt_queue '{"action":"load"}'
+	selecta_yt_window_close
+	[ -f "$SELECTA_RUN/yt-cmd.json" ] && echo 1 || echo 0
+)"
+
 # The pointer, not a glob of the versioned plugin cache path.
 t_eq "an absent plugin is reported as absent" "absent" "$(
 	rm -f "$SELECTA_HOME/yt-bin-path"

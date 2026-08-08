@@ -96,6 +96,7 @@ yt_ensure_window() {
 	fi
 	selecta_window_up && return 0
 	_yw_url=$(selecta_httpd_url) || return 1
+	selecta_yt_window_close
 	selecta_window_open "$_yw_url" || {
 		printf 'selecta-youtube: could not open a browser window for the player.\n' >&2
 		printf 'Open this yourself and leave it visible:\n  %s\n' "$_yw_url" >&2

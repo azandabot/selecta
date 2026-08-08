@@ -156,6 +156,7 @@ stream_for() {
 # is written first so the supervisor has it before the file-loaded event.
 start_source() {
 	_ss_card=$1
+	selecta_np_pause_others
 	_ss_urls=$(stream_for "$(printf '%s' "$_ss_card" | jq -r .id)") || {
 		printf 'selecta: could not reach %s\n' \
 			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
@@ -467,6 +468,9 @@ cmd_stop() {
 		selecta_yt_queue '{"action":"stop"}'
 		_cst_hit=1
 	fi
+	# Closed, not just silenced. A muted window left on screen is the thing
+	# that piles up, and "stopped" with a player still open is not stopped.
+	selecta_yt_window_close
 	if selecta_ipc_up; then
 		selecta_ipc_command '["stop"]' >/dev/null
 		_cst_hit=1
