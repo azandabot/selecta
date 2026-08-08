@@ -5,16 +5,16 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-blueviolet" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/no%20account-required-brightgreen" alt="No account required">
+  <img src="https://img.shields.io/badge/radio-no%20key%20needed-brightgreen" alt="Radio needs no key">
 </p>
 
 <!-- demo.gif goes here: /selecta play amapiano → status line lights up → /selecta crate -->
 
 ```
-/selecta play amapiano
-▶ Pescobar Radio
+/selecta play ambient                    # radio, no window
+/selecta play sponono by kabza de small  # YouTube, opens a small player
 
-♪ Kabza De Small — Sponono · Pescobar Radio · demo-api
+                          ♪ Kabza De Small — Sponono · YouTube · demo-api
 ```
 
 Selecta runs the set. Every repo gets its own.
@@ -98,6 +98,8 @@ cp -r selecta/skills/selecta ~/.claude/skills/
 | `mpv` | playback, volume, pause, track titles | `brew install mpv` / `apt-get install mpv` |
 | `jq` | everything | `brew install jq` / `apt-get install jq` |
 | `ffplay` | fallback if mpv is absent; limited control | part of ffmpeg |
+| `python3` | the YouTube player window only | preinstalled on macOS; `apt-get install python3` |
+| YouTube API key | playing a named song. Radio does not need it | free, see below |
 
 `selecta doctor` checks all of this and prints the exact command for your
 platform. It will not run a package manager for you.
@@ -107,7 +109,8 @@ platform. It will not run a package manager for you.
 | Command | What it does |
 |---|---|
 | `/selecta` | What is playing, plus this repo's crate |
-| `/selecta play <mood>` | Resolve and play. Takes a genre, artist, or vibe |
+| `/selecta play <mood>` | Resolve and play. Routes to radio or YouTube automatically |
+| `/selecta play --radio` · `--yt` | Force a backend |
 | `/selecta play` | Resume what this repo sounds like |
 | `/selecta resume` | This repo's top-ranked source |
 | `/selecta pause` · `go` | Pause, unpause |
@@ -124,7 +127,8 @@ platform. It will not run a package manager for you.
 | `/selecta uninstall [--purge]` | Remove cleanly |
 
 Ask in your own words too. "Play me something with a log drum" resolves to
-amapiano and afro house.
+amapiano and afro house on radio; "play sponono by kabza de small" finds that
+exact track on YouTube.
 
 ## Status line
 
@@ -155,13 +159,27 @@ second row. `selecta statusline off` restores everything.
 
 | Source | Key needed | What it gives |
 |---|---|---|
+| [YouTube](https://www.youtube.com) | free, yours | any specific song by name. Opens a small visible player |
 | [SomaFM](https://somafm.com) | no | 46 curated, ad-free, listener-supported stations |
 | [radio-browser](https://www.radio-browser.info) | no | thousands of community-indexed stations |
 | [Jamendo](https://www.jamendo.com) | free, optional | Creative Commons tracks, real text search |
 | [Internet Archive netlabels](https://archive.org/details/netlabels) | no | Creative Commons albums |
 
-**Nothing is downloaded.** Streams are played, never stored. There is no
-account, and the default experience needs no API key at all.
+**Nothing is downloaded.** Streams are played, never stored. Radio needs no
+account and no key at all; only YouTube does.
+
+### About the YouTube window
+
+YouTube's Developer Policies forbid playing from "a player that is not
+displayed", so YouTube mode opens a small 480×380 window and keeps it visible.
+That is not configurable. If you want music with no window, radio mode is the
+windowless option, and it stays the default.
+
+A related limitation worth knowing: **a lot of major-label music disallows
+embedded playback.** selecta filters unembeddable results at search time,
+validates them again in bulk, and auto-skips any that still fail, so you
+usually get the song, sometimes as a re-upload or lyric video rather than the
+official upload.
 
 SomaFM is listener-supported. If you use it, [support
 them](https://somafm.com/support/).
@@ -192,6 +210,13 @@ explicit path and refuses to write inside the working tree.
 
 ## Limitations
 
+- **YouTube mode always shows a window.** Required by YouTube's policies, not
+  a design choice.
+- **Some official uploads refuse embedded playback.** selecta skips to the next
+  candidate automatically, which can mean a re-upload instead of the official
+  video.
+- **YouTube search is capped at 100 queries a day** on your own key, resetting
+  midnight Pacific. Results are cached for 7 days, so repeats are free.
 - **Live radio cannot skip a track.** `selecta next` changes station, and says
   so rather than pretending.
 - **Track titles depend on the station.** Many streams send them; some send only
@@ -209,7 +234,7 @@ explicit path and refuses to write inside the working tree.
 ## Tests
 
 ```
-./tests/run.sh unit          # 140 assertions, offline, deterministic
+./tests/run.sh unit          # 192 assertions, offline, deterministic
 ./tests/run.sh integration   # real mpv with --ao=null, no audio device needed
 ./tests/run.sh contract      # live upstreams; nightly in CI, never on PRs
 ```

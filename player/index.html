@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>selecta</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0d0f;
+    color: #e8e8ea;
+    font: 13px/1.4 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  /* The player must stay visible and at least 200x200 per YouTube's
+     Required Minimum Functionality. It is never hidden, shrunk below that,
+     or covered. */
+  #player { width: 100%; aspect-ratio: 16 / 9; min-height: 200px; background: #000; flex: 0 0 auto; }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-height: 44px; }
+  #track { flex: 1 1 auto; min-width: 0; }
+  #title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sub { color: #9a9aa2; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sub a { color: inherit; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; flex: 0 0 auto; }
+  .dot.paused { background: #facc15; }
+  .dot.error  { background: #f87171; }
+  #hint { padding: 0 10px 8px; color: #6b6b73; font-size: 11px; }
+  button {
+    background: #1c1c20; color: #e8e8ea; border: 1px solid #2e2e34;
+    border-radius: 6px; padding: 5px 9px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #26262c; }
+</style>
+</head>
+<body>
+  <div id="player"></div>
+  <div id="bar">
+    <span class="dot" id="dot"></span>
+    <div id="track">
+      <div id="title">selecta</div>
+      <div id="sub">connecting…</div>
+    </div>
+    <button id="toggle" type="button">Pause</button>
+  </div>
+  <div id="hint"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN  = "__TOKEN__";
+  var ORIGIN = "__ORIGIN__";
+
+  var player = null, ready = false, lastSeq = 0;
+  var current = { videoId: "", title: "", artist: "", sourceId: "", repo: null };
+
+  var elTitle  = document.getElementById("title");
+  var elSub    = document.getElementById("sub");
+  var elDot    = document.getElementById("dot");
+  var elToggle = document.getElementById("toggle");
+  var elHint   = document.getElementById("hint");
+
+  function api(path, body) {
+    var url = ORIGIN + path + "?t=" + encodeURIComponent(TOKEN);
+    var opts = { cache: "no-store" };
+    if (body !== undefined) {
+      opts.method = "POST";
+      opts.body = JSON.stringify(body);
+      opts.headers = { "Content-Type": "application/json" };
+    }
+    return fetch(url, opts).then(function (r) { return r.json(); });
+  }
+
+  // The page is the only thing that knows what the player is actually doing,
+  // so it is the source of truth for the status line.
+  function report(status, extra) {
+    var payload = {
+      status: status,
+      videoId: current.videoId,
+      title: current.title,
+      artist: current.artist,
+      sourceId: current.sourceId,
+      repo: current.repo,
+      provider: "youtube"
+    };
+    if (extra) { for (var k in extra) { payload[k] = extra[k]; } }
+    api("/state", payload).catch(function () {});
+  }
+
+  function paint(status) {
+    elTitle.textContent = current.title || "selecta";
+    var bits = [];
+    if (current.artist) { bits.push(current.artist); }
+    bits.push(status);
+    elSub.textContent = bits.join(" · ");
+    elDot.className = "dot" + (status === "paused" ? " paused" : status === "error" ? " error" : "");
+    elToggle.textContent = status === "paused" ? "Play" : "Pause";
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player("player", {
+      host: "https://www.youtube-nocookie.com",
+      playerVars: {
+        // Controls stay on: modifying or hiding the player's own chrome is
+        // not permitted, and the viewport must stay at or above 200x200.
+        controls: 1,
+        rel: 0,
+        playsinline: 1,
+        origin: ORIGIN
+      },
+      events: {
+        onReady: function () {
+          ready = true;
+          elSub.textContent = "ready";
+          poll();
+        },
+        onStateChange: function (e) {
+          if (e.data === YT.PlayerState.PLAYING)      { paint("playing");   report("playing"); }
+          else if (e.data === YT.PlayerState.PAUSED)  { paint("paused");    report("paused"); }
+          else if (e.data === YT.PlayerState.BUFFERING){ paint("buffering"); report("buffering"); }
+          else if (e.data === YT.PlayerState.ENDED)   { paint("ended");     report("ended"); }
+        },
+        onError: function (e) {
+          // 101 and 150 mean the owner disallows embedded playback, 100 means
+          // the video is gone. None of these are recoverable here, so the
+          // shell is told to pick something else rather than the page sitting
+          // on a dead video.
+          var code = e.data;
+          var why = (code === 101 || code === 150)
+            ? "embedding disabled by the owner"
+            : code === 100 ? "video unavailable"
+            : code === 2   ? "bad video id"
+            : "playback error " + code;
+          elHint.textContent = why + " — skipping";
+          paint("error");
+          report("error", { errorCode: code, error: why });
+        },
+        onAutoplayBlocked: function () {
+          elHint.textContent = "Your browser blocked autoplay. Press play once.";
+          paint("paused");
+          report("paused", { autoplayBlocked: true });
+        }
+      }
+    });
+  };
+
+  function handle(cmd) {
+    if (!cmd || !ready) { return; }
+    if (cmd.seq && cmd.seq <= lastSeq) { return; }
+    lastSeq = cmd.seq || lastSeq;
+
+    switch (cmd.action) {
+      case "load":
+        current = {
+          videoId: cmd.videoId || "",
+          title: cmd.title || "",
+          artist: cmd.artist || "",
+          sourceId: cmd.sourceId || "",
+          repo: cmd.repo || null
+        };
+        elHint.textContent = "";
+        paint("buffering");
+        player.loadVideoById(cmd.videoId);
+        break;
+      case "pause":  player.pauseVideo(); break;
+      case "play":   player.playVideo(); break;
+      case "stop":   player.stopVideo(); paint("stopped"); report("stopped"); break;
+      case "volume":
+        if (typeof cmd.value === "number") { player.setVolume(Math.max(0, Math.min(100, cmd.value))); }
+        break;
+      case "mute":   player.mute(); break;
+      case "unmute": player.unMute(); break;
+      case "quit":   report("stopped"); window.close(); break;
+    }
+  }
+
+  function poll() {
+    api("/cmd")
+      .then(function (r) { handle(r.cmd); })
+      .catch(function () {})
+      .then(function () { setTimeout(poll, 900); });
+  }
+
+  elToggle.addEventListener("click", function () {
+    if (!player) { return; }
+    var s = player.getPlayerState();
+    if (s === YT.PlayerState.PLAYING) { player.pauseVideo(); } else { player.playVideo(); }
+  });
+
+  // Music is provided by YouTube, and saying so is part of using their player.
+  elHint.textContent = "Playing via YouTube";
+
+  var tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+</script>
+</body>
+</html>

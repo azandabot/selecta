@@ -33,8 +33,10 @@ jobs:
             | all(. as $s | $ids|index($s) != null)' \
             data/mood-map.json data/somafm-channels.seed.json
       - name: no ai attribution in tracked files
+        # Excludes this file, which would otherwise match its own pattern and
+        # fail every run.
         run: |
-          ! git grep -niE 'co-authored-by|generated with' -- . || exit 1
+          ! git grep -niE 'co-authored-by|generated with' -- . ':!.github/workflows/ci.yml' || exit 1
 
   test:
     strategy:

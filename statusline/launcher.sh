@@ -38,7 +38,9 @@ fi
 {
 	IFS= read -r _colored
 	IFS= read -r _plain
-} <"$_seg" 2>/dev/null || exit 0
+	IFS= read -r _status
+	IFS= read -r _widths
+} <"$_seg" 2>/dev/null || true
 [ -n "${_colored:-}" ] || exit 0
 
 if [ -n "${NO_COLOR:-}" ] || [ "${TERM:-}" = dumb ]; then
@@ -64,12 +66,50 @@ set +f
 unset IFS
 
 if [ "$_cols" -ge 120 ]; then
-	_out=${3:-${2:-${1:-}}}
+	_pick=3
 elif [ "$_cols" -ge 80 ]; then
-	_out=${2:-${1:-}}
+	_pick=2
 else
-	_out=${1:-}
+	_pick=1
 fi
 
-[ -n "${_out:-}" ] && printf '%s\n' "$_out"
+eval "_out=\${$_pick:-}"
+[ -n "${_out:-}" ] || eval "_out=\${1:-}"
+[ -n "${_out:-}" ] || exit 0
+
+# Right-aligned by default, so the line sits under the right-hand side of the
+# input box rather than competing with what is printed on the left. The visible
+# width comes from the segment file: measuring it here would mean counting
+# around ANSI escapes and multi-byte characters on every refresh.
+_align=right
+if [ -r "$SELECTA_HOME/run/align" ]; then
+	IFS= read -r _a <"$SELECTA_HOME/run/align" 2>/dev/null
+	[ "${_a:-}" = left ] && _align=left
+fi
+
+if [ "$_align" = right ] && [ -n "${_widths:-}" ]; then
+	set -f
+	IFS='	'
+	# shellcheck disable=SC2086
+	set -- $_widths
+	set +f
+	unset IFS
+	eval "_w=\${$_pick:-}"
+	# An unreadable width is a reason to fall back to left alignment, not to
+	# treat the line as zero-width and pad the entire terminal.
+	case ${_w:-} in
+	'' | *[!0-9]*) _w='' ;;
+	esac
+	if [ -n "${_w:-}" ]; then
+		_pad=$((_cols - _w))
+		# One column of slack keeps the last character off the wrap boundary.
+		[ "$_pad" -gt 0 ] && _pad=$((_pad - 1))
+		if [ "$_pad" -gt 0 ]; then
+			printf '%*s%s\n' "$_pad" '' "$_out"
+			exit 0
+		fi
+	fi
+fi
+
+printf '%s\n' "$_out"
 exit 0

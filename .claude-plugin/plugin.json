@@ -19,6 +19,14 @@
     "creative-commons"
   ],
   "userConfig": {
+    "youtube_api_key": {
+      "type": "string",
+      "title": "YouTube Data API key (optional)",
+      "description": "Enables playing specific songs by name. Free: console.cloud.google.com -> new project -> enable YouTube Data API v3 -> Credentials -> API key. Leave blank and radio still works with no account.",
+      "required": false,
+      "sensitive": false,
+      "default": ""
+    },
     "jamendo_client_id": {
       "type": "string",
       "title": "Jamendo client ID (optional)",

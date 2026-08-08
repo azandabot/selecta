@@ -20,7 +20,21 @@ code() {
 	echo $?
 }
 
-write_seg() { printf '%s\n%s\n%s\n' "$1" "$2" "${3:-playing}" >"$SEG"; }
+# Writes a segment file, deriving the width line the way the supervisor does.
+write_seg() {
+	_w=''
+	for _i in 1 2 3; do
+		_p=$(printf '%s' "$2" | cut -f"$_i")
+		_w="$_w${_w:+	}$(printf '%s' "$_p" | wc -m | tr -d ' ')"
+	done
+	printf '%s\n%s\n%s\n%s\n' "$1" "$2" "${3:-playing}" "$_w" >"$SEG"
+}
+
+# Most assertions are about which variant is chosen and what it contains, so
+# they run left-aligned. Alignment has its own section below.
+align_left() { printf 'left\n' >"$SELECTA_HOME/run/align"; }
+align_right() { printf 'right\n' >"$SELECTA_HOME/run/align"; }
+align_left
 
 NARROW='♪ Kabza De Small'
 MID='♪ Kabza De Small — Sponono · Groove Salad'
@@ -104,4 +118,55 @@ t_eq "a failing wrapped command still exits 0" "0" "$(code 40)"
 t_eq "a failing wrapped command still shows our line" "$NARROW" "$(run 40)"
 
 rm -f "$SELECTA_HOME/run/wrapped_command"
+
+# --- alignment --------------------------------------------------------------
+# Right is the default: the line should sit under the right-hand end of the
+# input box, not compete with output on the left.
+align_right
+write_seg "$NARROW	$MID	$WIDE" "$NARROW	$MID	$WIDE"
+
+_r=$(run 80)
+t_eq "right aligned still ends with the text" "$MID" \
+	"$(printf '%s' "$_r" | sed 's/^ *//')"
+starts_with_space() {
+	case $1 in
+	' '*) printf true ;;
+	*) printf false ;;
+	esac
+}
+t_eq "right aligned is padded on the left" "true" "$(starts_with_space "$_r")"
+
+# The line must land flush to the right edge, one column of slack.
+_len=$(printf '%s' "$_r" | wc -m | tr -d ' ')
+t_eq "right aligned line reaches the right edge" "79" "$_len"
+
+_r=$(run 200)
+t_eq "right alignment scales with terminal width" "199" \
+	"$(printf '%s' "$_r" | wc -m | tr -d ' ')"
+
+# A line wider than the terminal must not gain negative padding.
+write_seg "$WIDE	$WIDE	$WIDE" "$WIDE	$WIDE	$WIDE"
+t_eq "no padding when the text already fills the width" "$WIDE" "$(run 30)"
+t_eq "over-wide line still exits 0" "0" "$(code 30)"
+
+# Multi-byte characters must be measured as characters, not bytes, or the line
+# gets pushed off the right edge.
+MB='♪ Björk — Jóga · Café'
+write_seg "$MB	$MB	$MB" "$MB	$MB	$MB"
+_r=$(run 80)
+t_eq "multi-byte title is measured by character" "79" \
+	"$(printf '%s' "$_r" | wc -m | tr -d ' ')"
+
+# A missing width line must degrade to left alignment rather than break.
+printf '%s\n%s\n%s\n' "$NARROW" "$NARROW" playing >"$SEG"
+t_eq "missing width line falls back to left" "$NARROW" "$(run 80)"
+t_eq "missing width line exits 0" "0" "$(code 80)"
+
+# A corrupt width line must not produce a broken printf.
+write_seg "$NARROW	$MID	$WIDE" "$NARROW	$MID	$WIDE"
+sed '4s/.*/abc\tdef\tghi/' "$SEG" >"$SEG.tmp" && mv "$SEG.tmp" "$SEG"
+t_eq "non-numeric widths exit 0" "0" "$(code 80)"
+t_eq "non-numeric widths fall back to left" "$MID" "$(run 80)"
+
+align_left
 rm -rf "$SELECTA_HOME"

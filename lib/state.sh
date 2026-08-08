@@ -70,6 +70,11 @@ selecta_segment_lines() {
 #   line 1  coloured   narrow \t mid \t wide
 #   line 2  plain      narrow \t mid \t wide
 #   line 3  status token
+#   line 4  visible widths, narrow \t mid \t wide
+#
+# Line 4 exists so the launcher can right-align without measuring a string that
+# contains ANSI escapes and multi-byte characters. Measuring is done here, once
+# per state change, instead of on every status line refresh.
 selecta_segment_write() {
 	_sw_state=$1
 	_sw_plain=$(selecta_segment_lines "$_sw_state") || {
@@ -83,8 +88,22 @@ selecta_segment_write() {
 	_sw_col=$(printf '%s' "$_sw_plain" | awk -v d="$_sw_dim" -v o="$_sw_off" \
 		'BEGIN{FS=OFS="\t"} {for(i=1;i<=NF;i++) $i = d $i o; print}')
 
-	printf '%s\n%s\n%s\n' "$_sw_col" "$_sw_plain" "$_sw_status" |
+	# wc -m counts characters, not bytes, so a track title with accents or a
+	# musical glyph does not overstate its width and push the line off-screen.
+	_sw_w=''
+	for _sw_i in 1 2 3; do
+		_sw_part=$(printf '%s' "$_sw_plain" | cut -f"$_sw_i")
+		_sw_n=$(printf '%s' "$_sw_part" | wc -m | tr -d ' ')
+		_sw_w="$_sw_w${_sw_w:+	}$_sw_n"
+	done
+
+	printf '%s\n%s\n%s\n%s\n' "$_sw_col" "$_sw_plain" "$_sw_status" "$_sw_w" |
 		selecta_atomic_write "$SELECTA_SEGMENT"
+
+	# Alignment preference is materialised as a plain word so the launcher can
+	# read it without parsing config.json.
+	printf '%s\n' "$(selecta_cfg_get '.statusline.align' '"right"' | tr -d '"')" |
+		selecta_atomic_write "$SELECTA_RUN/align" 2>/dev/null || true
 }
 
 # Composes the state document and writes both files together, so the status

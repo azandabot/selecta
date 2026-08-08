@@ -40,18 +40,32 @@ invention. If `resolve` returns nothing, say so and offer `selecta stations`.
 Setting up someone's environment, starting a long task, or being told "I'm about
 to focus" are not requests for music.
 
-## Playing something
+## Two backends, one command
 
-For a direct request, pass the user's words through unchanged:
+**Radio** is the default and opens no window. **YouTube** plays a specific
+recording and opens a small player window, because YouTube's policies forbid
+playing from a player that is not displayed.
+
+`selecta play` routes automatically: moods and genres stay on radio, named
+songs and artists go to YouTube. Pass the user's words through unchanged and
+let it decide.
 
 ```
-selecta play amapiano
-selecta play something calm for reading
-selecta play groovesalad
+selecta play amapiano                    # radio, no window
+selecta play something calm for reading  # radio, no window
+selecta play sponono by kabza de small   # YouTube, opens the window
+selecta play --radio <anything>          # force radio
+selecta play --yt <anything>             # force YouTube
 ```
+
+**Never force `--yt` for an ambient or mood request.** A window appearing when
+someone asked for background music is the worst outcome this tool has.
 
 `selecta play` with no argument resumes what this repository already sounds
 like, or starts a first station if the repo has no crate yet.
+
+Read `references/youtube.md` before explaining the window, the API key, or why
+a result looks like a re-upload rather than the official video.
 
 ## When a request has no obvious match
 
@@ -147,6 +161,8 @@ speculating about a failure.
 
 ## Reference files
 
+- `references/youtube.md` — when YouTube is used, the mandatory player window,
+  embeddability failures, the API key and quota. Read before touching YouTube.
 - `references/stations.md` — the 46 SomaFM stations, their genres, and the mood
   vocabulary. Read this when rewriting an ambiguous request.
 - `references/statusline.md` — the exact settings block, merge behaviour, wrap
