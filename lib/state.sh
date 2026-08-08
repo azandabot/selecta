@@ -22,7 +22,18 @@ selecta_ellipsize() {
 	fi
 }
 
-# Builds the three plain-text variants from a state document.
+# Builds the three plain-text variants from five plain strings. No jq: the
+# whole point of the now-playing path is that it runs where jq does not.
+selecta_segment_lines_plain() {
+	_sg_status=${1:-stopped}
+	_sg_artist=${2:-}
+	_sg_title=${3:-}
+	_sg_station=${4:-}
+	_sg_repo=${5:-}
+	_sg_render
+}
+
+# Same thing from a state document, for the paths that already hold one.
 selecta_segment_lines() {
 	_sg_state=$1
 
@@ -34,6 +45,18 @@ selecta_segment_lines() {
 	_sg_title=$(printf '%s' "$_sg_state" | jq -r '.now.title // .last.title // ""')
 	_sg_station=$(printf '%s' "$_sg_state" | jq -r '.source.title // .last.source // ""')
 	_sg_repo=$(printf '%s' "$_sg_state" | jq -r '.repo.display_name // .last.repo // ""')
+	_sg_render
+}
+
+_sg_render() {
+	# The segment file is tab-separated, so a tab inside a track title would
+	# forge extra fields and make the launcher pick the wrong width variant.
+	# Newlines would forge extra lines. Both get flattened to spaces here,
+	# once per state change rather than on every status line refresh.
+	_sg_artist=$(printf '%s' "$_sg_artist" | tr '\t\n' '  ')
+	_sg_title=$(printf '%s' "$_sg_title" | tr '\t\n' '  ')
+	_sg_station=$(printf '%s' "$_sg_station" | tr '\t\n' '  ')
+	_sg_repo=$(printf '%s' "$_sg_repo" | tr '\t\n' '  ')
 
 	if [ -n "$_sg_artist" ] && [ -n "$_sg_title" ]; then
 		_sg_track="$_sg_artist — $_sg_title"
@@ -61,8 +84,10 @@ selecta_segment_lines() {
 
 	# Remaining search budget, on the widest variant only. This is the number
 	# people actually need and it has nowhere else persistent to live.
+	# jq-gated: the quota lives in config.json, and the whole point of this
+	# renderer is that it also runs where jq does not exist.
 	_sg_left=''
-	if selecta_yt_have_key 2>/dev/null; then
+	if selecta_have jq && selecta_yt_have_key 2>/dev/null; then
 		_sg_left=" · $(selecta_yt_quota_left) left"
 	fi
 
@@ -94,6 +119,13 @@ selecta_segment_write() {
 	_sw_state=$1
 	_sw_plain=$(selecta_segment_lines "$_sw_state") || return 0
 	_sw_status=$(printf '%s' "$_sw_state" | jq -r '.status // "stopped"')
+	selecta_segment_render "$_sw_plain" "$_sw_status"
+}
+
+# Writes the four-line segment file from pre-rendered plain variants. jq-free.
+selecta_segment_render() {
+	_sw_plain=$1
+	_sw_status=$2
 
 	_sw_dim=$(printf '\033[2m')
 	_sw_off=$(printf '\033[0m')

@@ -36,6 +36,8 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/player.sh"
 # shellcheck source=lib/ipc.sh
 . "$SELECTA_ROOT/lib/ipc.sh"
+# shellcheck source=lib/nowplaying.sh
+. "$SELECTA_ROOT/lib/nowplaying.sh"
 # shellcheck source=lib/soundtrack.sh
 . "$SELECTA_ROOT/lib/soundtrack.sh"
 
@@ -243,9 +245,33 @@ sup_tick() {
 		return 0
 	fi
 
-	# No player of ours. Leave whatever the last state was; the segment keeps
-	# showing the last track rather than blanking.
+	# Nothing of ours is playing, so show whatever else is. This is the path
+	# that makes selecta useful on a machine with no mpv and no jq.
+	_t_np=$(selecta_np_probe 2>/dev/null) || {
+		sup_idle_segment
+		return 0
+	}
+	sup_write_foreign "$_t_np"
 	return 0
+}
+
+# Renders a foreign player's line straight to the segment, without going
+# through state.json: that document is selecta's own playback, and claiming
+# Spotify's track as ours would corrupt the crate.
+sup_write_foreign() {
+	_wf_st=$(printf '%s' "$1" | cut -f1)
+	_wf_ar=$(printf '%s' "$1" | cut -f2)
+	_wf_ti=$(printf '%s' "$1" | cut -f3)
+	_wf_sr=$(printf '%s' "$1" | cut -f4)
+	_wf_plain=$(selecta_segment_lines_plain "$_wf_st" "$_wf_ar" "$_wf_ti" "$_wf_sr" "") || return 0
+	selecta_segment_render "$_wf_plain" "$_wf_st"
+}
+
+# Nothing anywhere. Keep the last line rather than blanking the bar.
+sup_idle_segment() {
+	[ -s "$SELECTA_SEGMENT" ] && return 0
+	_is_plain=$(selecta_segment_lines_plain stopped "" "" "" "") || return 0
+	selecta_segment_render "$_is_plain" stopped
 }
 
 if [ "$MODE" = once ]; then

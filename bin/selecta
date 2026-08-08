@@ -34,6 +34,8 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/player.sh"
 # shellcheck source=lib/ipc.sh
 . "$SELECTA_ROOT/lib/ipc.sh"
+# shellcheck source=lib/nowplaying.sh
+. "$SELECTA_ROOT/lib/nowplaying.sh"
 # shellcheck source=lib/state.sh
 . "$SELECTA_ROOT/lib/state.sh"
 # shellcheck source=lib/soundtrack.sh
@@ -755,6 +757,7 @@ cmd_doctor() {
 	else
 		printf '  ipc      %s\n' "$_cd_t"
 	fi
+	printf '  players  %s\n' "$(selecta_np_capability)"
 	printf '  window   %s\n' "$(selecta_window_up && echo "player page live" || echo "closed")"
 	_cd_state=$(selecta_state_read | jq -r '.status // "stopped"')
 	if [ "$_cd_state" != stopped ] && ! selecta_ipc_up && ! selecta_window_up; then
