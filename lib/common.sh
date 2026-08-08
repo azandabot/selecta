@@ -230,8 +230,11 @@ selecta_cfg_get() {
 		printf '%s' "$2"
 		return 0
 	}
-	_cg=$(jq -c "$1 // empty" "$SELECTA_CONFIG" 2>/dev/null)
-	[ -n "$_cg" ] || _cg=$2
+	# Not `// empty`: jq's alternative operator treats false as absent, so
+	# `.privacy.record_commits` set to false silently fell back to the default
+	# true and kept stamping commits after the user turned it off.
+	_cg=$(jq -c "$1" "$SELECTA_CONFIG" 2>/dev/null)
+	[ -n "$_cg" ] && [ "$_cg" != null ] || _cg=$2
 	printf '%s' "$_cg"
 }
 

@@ -11,7 +11,6 @@
 # The supervisor writes these. bin/selecta reads them.
 
 SELECTA_TRACK_CAP=500
-SELECTA_HALFLIFE_DAYS=30
 
 # Resolves a key to its file, following aliases. A fork-to-upstream remote swap
 # changes the primary key, so without the alias sweep the repo would silently
@@ -23,15 +22,18 @@ selecta_st_file_for() {
 		printf '%s' "$_sf_direct"
 		return 0
 	}
-	if [ -d "$SELECTA_SOUNDTRACKS" ]; then
-		for _sf_f in "$SELECTA_SOUNDTRACKS"/*.json; do
-			[ -f "$_sf_f" ] || continue
-			case $_sf_f in */index.json) continue ;; esac
-			if jq -e --arg k "$_sf_key" '(.aliases // []) | index($k)' "$_sf_f" >/dev/null 2>&1; then
-				printf '%s' "$_sf_f"
-				return 0
-			fi
-		done
+	# Aliases are resolved through the index, one jq over one file. This used
+	# to loop every crate on disk with a jq each, from seven call sites, so a
+	# machine with fifty repos forked fifty times per status line read.
+	_sf_idx=$SELECTA_SOUNDTRACKS/index.json
+	if [ -s "$_sf_idx" ]; then
+		_sf_hit=$(jq -r --arg k "$_sf_key" '
+			to_entries[] | select((.value.aliases // []) | index($k)) | .value.file' \
+			"$_sf_idx" 2>/dev/null | head -1)
+		[ -n "$_sf_hit" ] && [ -f "$SELECTA_SOUNDTRACKS/$_sf_hit" ] && {
+			printf '%s' "$SELECTA_SOUNDTRACKS/$_sf_hit"
+			return 0
+		}
 	fi
 	printf '%s' "$_sf_direct"
 }
@@ -72,7 +74,8 @@ selecta_st_save() {
 		--arg n "$(printf '%s' "$_ss_doc" | jq -r .display_name)" \
 		--arg u "$(selecta_now_iso)" \
 		--argjson s "$(selecta_json_or "$(printf '%s' "$_ss_doc" | jq '.totals.seconds')" 0)" \
-		'.[$k] = {file: $f, display_name: $n, updated_at: $u, seconds: $s}' |
+		--argjson a "$(selecta_json_or "$(printf '%s' "$_ss_doc" | jq -c '.aliases // []')" '[]')" \
+		'.[$k] = {file: $f, display_name: $n, updated_at: $u, seconds: $s, aliases: $a}' |
 		selecta_atomic_write "$_ss_idx"
 }
 
@@ -153,19 +156,38 @@ selecta_st_add_seconds() {
 	selecta_st_save "$_as_key" "$_as_new"
 }
 
-# Ranked sources. Half-life decay means a station hammered six months ago does
-# not outrank yesterday's, but does not vanish either.
+# Two orderings, both of which a user would guess. Decay with a play-count
+# fudge produced a score nobody could predict or test, and at three sources it
+# was indistinguishable from either of these.
+#
+# resume and next walk by recency: the thing you had on last is what you want
+# when you come back to a project.
 selecta_st_rank() {
-	_rk_doc=$1
-	printf '%s' "$_rk_doc" | jq --argjson hl "$SELECTA_HALFLIFE_DAYS" --arg now "$(selecta_now_iso)" '
-		def age_days($t): (($now | fromdateiso8601) - ($t | fromdateiso8601)) / 86400;
-		[ .sources[]
-		  | select(.banned != true)
-		  | . as $s
-		  # A source with no banked listening time yet is weighted by play
-		  # count, so a station started moments ago still ranks.
-		  | ( if ($s.seconds // 0) == 0 then (($s.plays // 1) * 60) else $s.seconds end ) as $weight
-		  | $s + {score: ( $weight * pow(0.5; (age_days($s.last_played_at) / $hl)) )} ]
-		| sort_by( (if .pinned then 0 else 1 end), -.score )'
+	printf '%s' "$1" | jq '
+		[ .sources[] | select(.banned != true) | select((.failures // 0) < 3) ]
+		| sort_by(.last_played_at) | reverse'
+}
+
+# The crate card ranks by listening time, because that is what its bars encode.
+selecta_st_rank_by_time() {
+	printf '%s' "$1" | jq '
+		[ .sources[] | select(.banned != true) ]
+		| sort_by(.seconds // 0) | reverse'
+}
+
+# Three consecutive failures retires a source. troubleshooting.md has promised
+# this since the first release and nothing implemented it.
+selecta_st_mark_failure() {
+	_mf_doc=$(selecta_st_load "$1") || return 0
+	selecta_st_save "$1" "$(printf '%s' "$_mf_doc" | jq --arg s "$2" \
+		'.sources |= map(if .id == $s then .failures = ((.failures // 0) + 1) else . end)')"
+}
+
+selecta_st_clear_failure() {
+	_cf_doc=$(selecta_st_load "$1") || return 0
+	printf '%s' "$_cf_doc" | jq -e --arg s "$2" \
+		'.sources[] | select(.id == $s and (.failures // 0) > 0)' >/dev/null 2>&1 || return 0
+	selecta_st_save "$1" "$(printf '%s' "$_cf_doc" | jq --arg s "$2" \
+		'.sources |= map(if .id == $s then .failures = 0 else . end)')"
 }
 

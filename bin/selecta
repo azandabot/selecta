@@ -71,8 +71,8 @@ selecta - background music for your coding sessions
   selecta vol <0-100|+10|-10|mute>
 
   selecta crate                 what this repo sounds like
-  selecta history [n]           tracks, grouped by the commit they scored
-  selecta pin|ban|forget [src]  curate this repo's crate
+  selecta crate --history [n]   tracks, grouped by the commit they scored
+  selecta crate --path          where this repo's crate file lives
   selecta stations [query]      browse the catalog without playing
 
   selecta statusline on|off|status
@@ -204,11 +204,24 @@ start_source() {
 
 	if wait_until_playing 40; then
 		printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
-	else
-		printf 'selecta: %s was accepted but never started playing.\n' \
-			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
-		return "$EX_NETWORK"
+		return 0
 	fi
+
+	# SomaFM rotates its endpoints, which is what the mirrors in the playlist
+	# are for. They were being stored and never used.
+	for _ss_alt in $(printf '%s\n' "$_ss_urls" | tail -n +2); do
+		selecta_log info "mirror retry: $_ss_alt"
+		selecta_state_write stopped 2>/dev/null || true
+		selecta_ipc_command "[\"loadfile\",$(printf '%s' "$_ss_alt" | jq -R .)]" >/dev/null
+		if wait_until_playing 30; then
+			printf '%s\n' "$(printf '%s' "$_ss_card" | jq -r '"▶ " + .title')"
+			return 0
+		fi
+	done
+
+	printf 'selecta: %s was accepted but never started playing.\n' \
+		"$(printf '%s' "$_ss_card" | jq -r .title)" >&2
+	return "$EX_NETWORK"
 }
 
 # Replays a YouTube track straight from its stored video id. No search, so a
@@ -267,10 +280,13 @@ play_ranked() {
 	while [ "$_pr_i" -lt "$_pr_n" ]; do
 		_pr_card=$(printf '%s' "$_pr_list" | jq -c ".[$_pr_i]")
 		_pr_i=$((_pr_i + 1))
-		[ "$(printf '%s' "$_pr_card" | jq -r .id)" = "$_pr_skip" ] && continue
-        	if play_source "$(printf '%s' "$_pr_card" | jq -c '{id,kind,provider,title,resolver}')"; then
+		_pr_id=$(printf '%s' "$_pr_card" | jq -r .id)
+		[ "$_pr_id" = "$_pr_skip" ] && continue
+		if play_source "$(printf '%s' "$_pr_card" | jq -c '{id,kind,provider,title,resolver}')"; then
+			selecta_st_clear_failure "$(repo_json | jq -r .key)" "$_pr_id" || true
 			return 0
 		fi
+		selecta_st_mark_failure "$(repo_json | jq -r .key)" "$_pr_id" || true
 		[ "$_pr_i" -lt "$_pr_n" ] && printf '  trying the next source in the crate…\n' >&2
 	done
 	printf 'selecta: nothing in this crate would play. Try: selecta play <mood>\n' >&2
@@ -568,6 +584,18 @@ cmd_vol() {
 }
 
 cmd_crate() {
+	# --history is the commit-grouped view. It was a separate subcommand; the
+	# feature is the differentiator but it does not need its own router entry.
+	case ${1:-} in
+	--history) shift; cmd_history "$@"; return $? ;;
+	--path)
+		_cp_key=$(repo_json | jq -r .key)
+		selecta_st_load "$_cp_key" >/dev/null 2>&1 || return "$EX_NOTFOUND"
+		selecta_st_file_for "$_cp_key"
+		printf '\n'
+		return 0
+		;;
+	esac
 	_cc_repo=$(repo_json)
 	_cc_doc=$(selecta_st_load "$(printf '%s' "$_cc_repo" | jq -r .key)" 2>/dev/null) || {
 		printf 'No crate yet for %s.\nStart one: selecta play <mood>\n' \
@@ -583,7 +611,7 @@ cmd_crate() {
 		"$([ "$_cc_tracks" = 1 ] || printf s)" \
 		"$(printf '%s' "$_cc_doc" | jq -r '.created_at|split("T")[0]')"
 
-	selecta_st_rank "$_cc_doc" | jq -r --argjson total "$([ "$_cc_total" -gt 0 ] && echo "$_cc_total" || echo 1)" '
+	selecta_st_rank_by_time "$_cc_doc" | jq -r --argjson total "$([ "$_cc_total" -gt 0 ] && echo "$_cc_total" || echo 1)" '
 		.[0:6][] |
 		((.seconds // 0) * 10 / $total | floor) as $bars |
 		"  \(.title[0:20] + (" " * (20 - (.title[0:20]|length))))" +
@@ -619,38 +647,6 @@ cmd_history() {
 		"  \(if .[0].commit == "" then "(no commit)" else .[0].commit end)   \(.[0].t|split("T")[0]) \(.[0].t|split("T")[1][0:5])\n" +
 		"           \(length) tracks\n" +
 		(map("             \(.artist) — \(.title)") | join("\n"))'
-}
-
-cmd_curate() {
-	_cu_action=$1
-	shift
-	_cu_target=$*
-	_cu_key=$(repo_json | jq -r .key)
-	_cu_doc=$(selecta_st_load "$_cu_key" 2>/dev/null) ||
-		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
-
-	if [ "$_cu_action" = forget ] && [ "$_cu_target" = all ]; then
-		_cu_name=$(printf '%s' "$_cu_doc" | jq -r .display_name)
-		if [ "${3:-}" != "--confirm" ] || [ "${4:-}" != "$_cu_name" ]; then
-			printf 'This deletes the whole crate for this repo.\n'
-			selecta_confirm "$_cu_name" "Type the repo name to confirm: " \
-				"selecta forget all --confirm $_cu_name" || return $?
-		fi
-		rm -f "$(selecta_st_file_for "$_cu_key")"
-		printf 'Crate deleted.\n'
-		return 0
-	fi
-
-	[ -n "$_cu_target" ] || _cu_target=$(selecta_state_read | jq -r '.source.id // ""')
-	[ -n "$_cu_target" ] || selecta_die "$EX_USAGE" "which source? try: selecta crate"
-
-	case $_cu_action in
-	pin) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(if .id == $s or .title == $s then .pinned = true else . end)') ;;
-	ban) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(if .id == $s or .title == $s then .banned = true else . end)') ;;
-	forget) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(select(.id != $s and .title != $s))') ;;
-	esac
-	selecta_st_save "$_cu_key" "$_cu_new"
-	printf '%s: %s\n' "$_cu_action" "$_cu_target"
 }
 
 cmd_stations() {
@@ -1030,9 +1026,7 @@ main() {
 	go) cmd_go ;;
 	stop) cmd_stop ;;
 	vol) cmd_vol "$@" ;;
-	crate) cmd_crate ;;
-	history) cmd_history "$@" ;;
-	pin | ban | forget) cmd_curate "$cmd" "$@" ;;
+	crate) cmd_crate "$@" ;;
 	stations) cmd_stations "$@" ;;
 	statusline) cmd_statusline "$@" ;;
 	doctor) cmd_doctor ;;

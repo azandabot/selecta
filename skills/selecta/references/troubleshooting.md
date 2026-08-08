@@ -29,7 +29,7 @@ If the second attempt is also empty, present three real candidates from
 | Symptom | Cause | Remedy |
 |---|---|---|
 | Playback stops after a few seconds | stream endpoint rotated | selecta retries the mirrors from the playlist automatically, then re-resolves. If it still fails the station may be down; try another. |
-| A station keeps failing | dead entry in the directory | After three consecutive failures it is auto-banned and demoted. `selecta ban <id>` does it immediately. |
+| A station keeps failing | dead entry in the directory | After three consecutive failures it is retired from the rotation automatically. |
 | `could not reach that stream` | network, or the provider is down | Check connectivity. SomaFM tier 1 works from a baked catalogue offline, but playback itself always needs the network. |
 | radio-browser results are empty | their directory currently resolves to a single host, so outages are common | Expected. selecta falls through to the Internet Archive automatically. |
 
@@ -80,7 +80,7 @@ thrown away silently.
 | worktrees | share the parent's crate, because a worktree is the same project |
 | fork, then remote changed to upstream | the crate follows, via the alias list |
 | no remote | keyed on the git directory |
-| not a git repo | keyed on the path; `selecta crate` says so, and offers to migrate if the directory later becomes a repo |
+| not a git repo | keyed on the path, so it will not follow a clone |
 | submodule | its own crate |
 
 ## Uninstalling
