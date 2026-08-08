@@ -36,14 +36,15 @@ listened, every track stamped with the branch and commit that were checked out
 while it played.
 
 ```
-  demo-api   13h 24m · 902 tracks · since 12 Jun
 
-  Groove Salad         ████████░░  6h 12m
-  Drone Zone           ███░░░░░░░  2h 30m
-  Mission Control      ██░░░░░░░░  1h 04m
+  demo-api   13h 23m · 904 tracks · since 2026-06-12
+
+  Groove Salad           ██████░░░░  8h 21m
+  Drone Zone             ██░░░░░░░░  3h 10m
+  Mission Control        █░░░░░░░░░  1h 51m
 
   On repeat        Alex Cortiz — Barista Breaks  (14×)
-  First track      Tycho — Awake, on 12 Jun while you wrote a1b2c3d
+  First track      Tycho — Awake, on 2026-06-12 while you wrote de0fe76
 
   selecta resume  →  Groove Salad
 ```

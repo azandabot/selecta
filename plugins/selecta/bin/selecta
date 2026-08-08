@@ -556,7 +556,10 @@ cmd_crate() {
 		"  \(.title[0:20] + (" " * (20 - (.title[0:20]|length))))" +
 		"\(if .pinned then "📌" else "  " end) " +
 		"\("█" * (if $bars > 10 then 10 else $bars end))\("░" * (10 - (if $bars > 10 then 10 else $bars end)))" +
-		"  \(.plays) plays"'
+		"  " + ((.seconds // 0) as $s |
+			if $s < 60 then "\($s)s"
+			elif $s < 3600 then "\($s / 60 | floor)m"
+			else "\($s / 3600 | floor)h \(($s % 3600) / 60 | floor)m" end)'
 
 	_cc_top=$(printf '%s' "$_cc_doc" | jq -r '
 		[.tracks[] | select(.title != "") | "\(.artist) — \(.title)"]
