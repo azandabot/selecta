@@ -106,7 +106,6 @@ cp -r selecta/skills/selecta ~/.claude/skills/
 |---|---|---|
 | `mpv` | playback, volume, pause, track titles | `brew install mpv` / `apt-get install mpv` |
 | `jq` | everything | `brew install jq` / `apt-get install jq` |
-| `ffplay` | fallback if mpv is absent; limited control | part of ffmpeg |
 | `python3` | the YouTube player window only | preinstalled on macOS; `apt-get install python3` |
 | YouTube API key | playing a named song. Radio does not need it | free, see below |
 
@@ -132,7 +131,6 @@ platform. It will not run a package manager for you.
 | `/selecta stations [query]` | Browse without playing |
 | `/selecta statusline on\|off` | Now playing in your status line |
 | `/selecta doctor` | Dependency and health check |
-| `/selecta export <path>` | Write the crate as `.m3u8` + `.json` |
 | `/selecta uninstall [--purge]` | Remove cleanly |
 
 Ask in your own words too. "Play me something with a log drum" resolves to
@@ -265,8 +263,8 @@ Crates live in `~/.claude/selecta/`, keyed by repository. ssh and https remotes
 collapse to one key, worktrees share the parent's crate, and a fork whose remote
 later points upstream carries its history across.
 
-**Nothing is ever written into your repository.** `selecta export` needs an
-explicit path and refuses to write inside the working tree.
+**Nothing is ever written into your repository.** Crates live in
+`~/.claude/selecta/`, keyed by repo.
 
 ## Limitations
 

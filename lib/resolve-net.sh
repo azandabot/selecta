@@ -2,7 +2,6 @@
 # Networked resolver tiers.
 #
 # Tier 2  radio-browser   keyless, thousands of stations
-# Tier 3  Archive.org     keyless, the netlabels collection
 #
 # Reached only when tiers 0-1 come back short, and every one of them is
 # best-effort: an upstream being down drops to the next tier rather than
@@ -93,27 +92,6 @@ selecta_rb_stream() {
 	printf '%s\n' "$_rbs_url"
 }
 
-# --- tier 4: archive.org netlabels ------------------------------------------
-# The deepest keyless track-level catalog available, and the reason zero-config
-# text search over real Creative Commons music is possible at all. Two round
-# trips, so it goes last.
-selecta_archive_search() {
-	_as_q=$1
-	_as_enc=$(printf 'collection:(netlabels) AND mediatype:(audio) AND (%s)' "$_as_q" | jq -sRr @uri)
-	_as_j=$(_rn_get "https://archive.org/advancedsearch.php?q=$_as_enc&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&fl%5B%5D=licenseurl&rows=8&output=json" 15)
-	[ -n "$_as_j" ] || return 1
-	printf '%s' "$_as_j" | jq -c --arg q "$_as_q" '
-		[ .response.docs[]?
-		  | select((.licenseurl // "") | test("creativecommons"))
-		  | { id: ("archive:" + .identifier), kind: "album", provider: "archive.org",
-			  title: ((if (.creator|type) == "array" then .creator[0] else (.creator // "") end
-					   | if . == "" then "" else . + " — " end) + (.title // .identifier)),
-			  genre: "", description: "Creative Commons, Internet Archive netlabels",
-			  score: 0.72, why: ("archive.org: " + $q),
-			  resolver: { type: "archive", id: .identifier, license: .licenseurl } } ]
-		| .[0:6]' 2>/dev/null
-}
-
 # --- combined ---------------------------------------------------------------
 
 # selecta_resolve_net <original query> <comma-separated tags>
@@ -157,11 +135,6 @@ selecta_resolve_net() {
 			fi
 		fi
 	done
-	if [ "$(printf '%s' "$_rn_all" | jq 'length')" -eq 0 ]; then
-		if _rn_ar=$(selecta_archive_search "$_rn_first"); then
-			[ -n "$_rn_ar" ] && _rn_all=$(printf '%s\n%s' "$_rn_all" "$_rn_ar" | jq -s 'add')
-		fi
-	fi
 
 	# Tags are split inside jq from a --arg string. Building the array with a
 	# nested `jq -R` produced no output at all for an empty input, and

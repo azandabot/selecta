@@ -1,3 +1,5 @@
 .DS_Store
 *.log
 tests/.tmp/
+__pycache__/
+*.pyc

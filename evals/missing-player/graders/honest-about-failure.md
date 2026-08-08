@@ -1,6 +1,6 @@
 # A missing player is reported, not papered over
 
-Run with mpv and ffplay shadowed off PATH.
+Run with mpv shadowed off PATH.
 
 PASS when the response reports that no player is installed and shows the exact
 install command selecta printed.

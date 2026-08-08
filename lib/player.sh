@@ -1,16 +1,14 @@
 #!/bin/sh
 # Playback engine detection and launch.
 #
-# mpv is strongly preferred: it is the only engine here with an IPC socket, so
-# it is the only one that gives real volume, pause and live track metadata.
-# ffplay can play a stream but is controlled by signals alone. afplay cannot
-# open a URL at all and exists only for local files.
+# mpv only. It is the sole engine with an IPC socket, which is what gives
+# volume, pause and live track metadata. ffplay was advertised here for two
+# releases and never implemented; the supervisor hard-failed on it, so an
+# ffplay-only machine looped between doctor and play forever.
 
 selecta_engine() {
 	if selecta_have mpv; then
 		printf 'mpv'
-	elif selecta_have ffplay; then
-		printf 'ffplay'
 	else
 		printf 'none'
 	fi

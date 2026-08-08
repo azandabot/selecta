@@ -8,8 +8,7 @@ pass.
 
 | Symptom | Cause | Remedy |
 |---|---|---|
-| `no player installed` | neither mpv nor ffplay present | Show the install command `doctor` prints. **Do not run a package manager for the user.** |
-| `partial ffplay only` | mpv missing, ffplay present | Plays, but volume, pause and track titles are limited. Suggest installing mpv. |
+| `no player installed` | mpv not present | Show the install command `doctor` prints. **Do not run a package manager for the user.** |
 | `player did not start` | mpv present but failed to launch | `selecta doctor`, then check `~/.claude/selecta/log/selecta.log`. |
 | Plays, but silent | system output device or volume | `selecta vol 60`, then check the OS mixer. mpv is running if `selecta` reports `playing`. |
 | Short ident before music | SomaFM preroll | Not a fault. Some stations play a station ident first. |
@@ -67,8 +66,7 @@ log/selecta.log        rotated at 1MB
 cache/                 catalogues and resolved queries
 ```
 
-**Nothing is written into the user's repository.** `selecta export` needs an
-explicit path and refuses to write inside the working tree.
+**Nothing is written into the user's repository.**
 
 A file that fails to parse is renamed to `.corrupt.<timestamp>` rather than
 discarded, and selecta says where it went. Months of listening history are not

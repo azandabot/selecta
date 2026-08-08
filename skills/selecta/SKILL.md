@@ -4,7 +4,7 @@ description: Plays background music in the terminal during a coding session and 
 argument-hint: "play <mood> | resume | next | stop | vol <n> | crate | history | stations | doctor"
 disable-model-invocation: true
 license: MIT
-compatibility: Requires mpv (or ffplay) and jq, plus network access. macOS and Linux.
+compatibility: Requires mpv and jq, plus network access. macOS and Linux.
 hooks:
   SessionEnd:
     - hooks:
@@ -128,8 +128,7 @@ user asks what they were listening to during some piece of work, that is
 `selecta history`.
 
 Crates live in `~/.claude/selecta/`, keyed by repository. **Nothing is ever
-written into the user's repository.** `selecta export` requires an explicit
-path and refuses to write inside the working tree.
+written into the user's repository.**
 
 ## Status line
 

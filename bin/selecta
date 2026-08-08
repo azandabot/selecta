@@ -66,7 +66,6 @@ selecta - background music for your coding sessions
 
   selecta statusline on|off|status
   selecta doctor                dependency and health check
-  selecta export [path]         write this crate as .m3u8 + .json
   selecta config [key [value]]
   selecta uninstall [--purge]
 
@@ -523,7 +522,10 @@ cmd_vol() {
 		*[!0-9]*) selecta_die "$EX_USAGE" "youtube volume takes 0-100, mute or unmute" ;;
 		*) yt_queue_cmd "$(jq -nc --argjson v "$1" '{action:"volume",value:$v}')" ;;
 		esac
-		printf 'Volume %s\n' "${1}"
+		case ${1:-} in
+		mute | unmute) printf '%sd.\n' "$1" ;;
+		*) printf 'Volume %s\n' "$1" ;;
+		esac
 		return 0
 	fi
 	_cv=${1:-}
@@ -635,7 +637,7 @@ cmd_curate() {
 	forget) _cu_new=$(printf '%s' "$_cu_doc" | jq --arg s "$_cu_target" '.sources |= map(select(.id != $s and .title != $s))') ;;
 	esac
 	selecta_st_save "$_cu_key" "$_cu_new"
-	printf '%sed %s\n' "$_cu_action" "$_cu_target"
+	printf '%s: %s\n' "$_cu_action" "$_cu_target"
 }
 
 cmd_stations() {
@@ -720,7 +722,6 @@ cmd_doctor() {
 	_cd_engine=$(selecta_engine)
 	case $_cd_engine in
 	mpv) printf '  ok       mpv (%s)\n' "$(mpv --version 2>/dev/null | head -1 | cut -d' ' -f2)" ;;
-	ffplay) printf '  partial  ffplay only. Volume and pause are limited; install mpv for the full experience.\n' ;;
 	none)
 		printf '  MISSING  no player\n'
 		_cd_fail=1
@@ -771,31 +772,6 @@ cmd_doctor() {
 	fi
 	[ "$_cd_fail" -eq 1 ] && exit "$EX_MISSING_DEP"
 	return 0
-}
-
-cmd_export() {
-	_ce_path=${1:-}
-	[ -n "$_ce_path" ] || selecta_die "$EX_USAGE" "export needs a destination path"
-	_ce_doc=$(selecta_st_load "$(repo_json | jq -r .key)" 2>/dev/null) ||
-		selecta_die "$EX_NOTFOUND" "no crate for this repo yet"
-	# Refuses to write inside the repo unless asked explicitly, so an export
-	# never lands in someone's next commit by accident.
-	_ce_abs=$(selecta_realpath "$_ce_path")
-	_ce_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
-	case ${_ce_top:+$_ce_abs} in
-	"$_ce_top"/*)
-		printf 'selecta: %s is inside this repository.\n' "$_ce_abs" >&2
-		printf 'Write it somewhere else, or confirm you want it committed.\n' >&2
-		exit "$EX_USAGE"
-		;;
-	esac
-	printf '%s' "$_ce_doc" | jq -r '.sources[] | "#EXTINF:-1,\(.title)\n\(.uri // "")"' |
-		{
-			printf '#EXTM3U\n'
-			cat
-		} >"$_ce_abs.m3u8"
-	printf '%s\n' "$_ce_doc" >"$_ce_abs.json"
-	printf 'Wrote %s.m3u8 and %s.json\n' "$_ce_abs" "$_ce_abs"
 }
 
 cmd_config() {
@@ -1024,7 +1000,6 @@ main() {
 	stations) cmd_stations "$@" ;;
 	statusline) cmd_statusline "$@" ;;
 	doctor) cmd_doctor ;;
-	export) cmd_export "$@" ;;
 	config) cmd_config "$@" ;;
 	resolve) cmd_resolve "$@" ;;
 	__yt-state) cmd_yt_state ;;
