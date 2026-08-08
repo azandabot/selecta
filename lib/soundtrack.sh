@@ -75,7 +75,7 @@ selecta_st_save() {
 		--arg k "$_ss_key" --arg f "$(basename -- "$_ss_file")" \
 		--arg n "$(printf '%s' "$_ss_doc" | jq -r .display_name)" \
 		--arg u "$(selecta_now_iso)" \
-		--argjson s "$(printf '%s' "$_ss_doc" | jq '.totals.seconds')" \
+		--argjson s "$(selecta_json_or "$(printf '%s' "$_ss_doc" | jq '.totals.seconds')" 0)" \
 		'.[$k] = {file: $f, display_name: $n, updated_at: $u, seconds: $s}' |
 		selecta_atomic_write "$_ss_idx"
 }

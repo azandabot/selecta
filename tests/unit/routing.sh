@@ -72,4 +72,39 @@ t_eq "nokey returns no candidates" "0" \
 t_eq "a fresh day starts at zero searches" "0" "$(selecta_yt_quota_used)"
 t_eq "a fresh day has the full budget" "100" "$(selecta_yt_quota_left)"
 
+# --- regression: empty tags crashed the whole resolve -----------------------
+# `jq -R 'split(",")'` emits nothing for empty input, and --argjson rejects an
+# empty string, so one empty value took the command down with
+# "invalid JSON text passed to --argjson". Tags are now split inside jq from a
+# --arg string, which cannot produce an empty argument.
+# shellcheck source=lib/resolve-net.sh
+. "$SELECTA_ROOT/lib/resolve-net.sh"
+
+for _pair in "::" "amapiano:" ":afro house" "x:,,," ":,"; do
+	_q=${_pair%%:*}
+	_t=${_pair#*:}
+	_out=$(selecta_resolve_net "$_q" "$_t" 2>&1)
+	t_eq "resolve_net survives q=[$_q] tags=[$_t]" "true" \
+		"$(printf '%s' "$_out" | jq -e 'has("status")' >/dev/null 2>&1 && echo true || echo false)"
+	t_eq "resolve_net q=[$_q] tags=[$_t] emits no jq error" "0" \
+		"$(printf '%s' "$_out" | grep -c 'argjson' || true)"
+done
+
+# --- regression: the argjson guard ------------------------------------------
+t_eq "json_or passes valid json through" '{"a":1}' "$(selecta_json_or '{"a":1}' '{}')"
+t_eq "json_or replaces an empty value" '{}' "$(selecta_json_or '' '{}')"
+t_eq "json_or replaces malformed json" '[]' "$(selecta_json_or 'not json' '[]')"
+t_eq "json_or output is always valid json" "0" \
+	"$(selecta_json_or '' '{}' | jq -e . >/dev/null 2>&1; echo $?)"
+
+# --- regression: resolve must answer the same question play does ------------
+# A named song that only ever scored radio stations made the model conclude
+# there was nothing to play, when YouTube had it.
+# Matching the literal source text, so the dollar signs must not expand.
+# shellcheck disable=SC2016
+t_eq "resolve consults youtube for a named song" "1" \
+	"$(grep -cF 'wants_youtube "$_rs_query" "$_rs_out"' "$SELECTA_ROOT/bin/selecta")"
+t_eq "resolve reports why youtube was skipped" "1" \
+	"$(grep -c 'nokey | quota)' "$SELECTA_ROOT/bin/selecta")"
+
 rm -rf "$SELECTA_HOME"

@@ -211,6 +211,18 @@ selecta_json_get() {
 
 # --- config -----------------------------------------------------------------
 
+# jq's --argjson rejects an empty string, so any value built by a command
+# substitution has to be defended: one upstream hiccup otherwise takes down the
+# whole command with "invalid JSON text passed to --argjson".
+selecta_json_or() {
+	# selecta_json_or <value> <fallback>
+	if [ -n "${1:-}" ] && printf '%s' "$1" | jq -e . >/dev/null 2>&1; then
+		printf '%s' "$1"
+	else
+		printf '%s' "$2"
+	fi
+}
+
 selecta_cfg_get() {
 	# selecta_cfg_get <jq-path> <default>
 	[ -s "$SELECTA_CONFIG" ] || {

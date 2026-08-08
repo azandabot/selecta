@@ -100,9 +100,10 @@ repo_json() {
 	jq -n --arg key "$SELECTA_REPO_KEY" --arg name "$SELECTA_REPO_NAME" \
 		--arg scope "$SELECTA_REPO_SCOPE" --arg branch "$SELECTA_REPO_BRANCH" \
 		--arg commit "$SELECTA_REPO_COMMIT" \
-		--argjson aliases "$(printf '%s' "$SELECTA_REPO_ALIASES" | jq -R -s 'split("\n")|map(select(length>0))')" \
+		--arg aliasstr "$SELECTA_REPO_ALIASES" \
 		'{key: $key, display_name: $name, scope: $scope, branch: $branch,
-		  commit: $commit, aliases: $aliases}'
+		  commit: $commit,
+		  aliases: ($aliasstr | split("\n") | map(select(length > 0)))}'
 }
 
 human_secs() {
@@ -161,7 +162,7 @@ start_source() {
 
 	printf '%s' "$_ss_card" | jq \
 		--arg uri "$_ss_first" --argjson mirrors "$_ss_mirrors" \
-		--argjson repo "$(repo_json)" \
+		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		'. + {uri: $uri, mirrors: $mirrors, repo: $repo}' |
 		selecta_atomic_write "$SELECTA_RUN/source.json"
 
@@ -641,7 +642,8 @@ selecta_yt_advance() {
 yt_start() {
 	_yt_cands=$1
 	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
-	jq -nc --argjson c "$_yt_cands" --argjson repo "$(repo_json)" \
+	jq -nc --argjson c "$(selecta_json_or "$_yt_cands" '[]')" \
+		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		'{candidates: $c, repo: $repo}' | selecta_atomic_write "$SELECTA_RUN/yt-queue.json"
 	yt_ensure_window || return 1
 	selecta_yt_advance || selecta_die "$EX_NOTFOUND" "no playable candidate"
@@ -676,7 +678,7 @@ cmd_yt_state() {
 	}')
 	_ys_now=$(printf '%s' "$_ys_in" | jq -c '{artist: (.artist // ""), title: (.title // "")}')
 	_ys_repo=$(printf '%s' "$_ys_in" | jq -c '.repo // {}')
-	_ys_extra=$(jq -n --argjson repo "$_ys_repo" '{volume: null, repo: $repo}')
+	_ys_extra=$(jq -n --argjson repo "$(selecta_json_or "$_ys_repo" '{}')" '{volume: null, repo: $repo}')
 
 	# Layer three of the embeddability defence. search.list filters and
 	# videos.list validates, but a video can become unplayable between the two
@@ -777,6 +779,22 @@ cmd_resolve() {
 		_rs_out=$(selecta_resolve_net "$_rs_query" "$_rs_tags")
 	else
 		_rs_out=$(selecta_resolve "$_rs_query")
+		# resolve has to answer the same question cmd_play does, or the model
+		# reads a radio-only result for a named song and concludes there is
+		# nothing to play. It consults YouTube on exactly the same condition.
+		if wants_youtube "$_rs_query" "$_rs_out"; then
+			_rs_yt=$(selecta_yt_resolve "$_rs_query")
+			case $(printf '%s' "$_rs_yt" | jq -r .status) in
+			ok)
+				_rs_out=$_rs_yt
+				;;
+			nokey | quota)
+				_rs_out=$(printf '%s' "$_rs_out" | jq -c \
+					--arg n "$(printf '%s' "$_rs_yt" | jq -r .status)" \
+					'. + {youtube: $n}')
+				;;
+			esac
+		fi
 		if [ "$(printf '%s' "$_rs_out" | jq -r .status)" != ok ]; then
 			_rs_hint=$(printf '%s' "$_rs_out" | jq -r '.hint_tags|join(",")')
 			[ -n "$_rs_hint" ] && _rs_out=$(selecta_resolve_net "$_rs_query" "$_rs_hint")

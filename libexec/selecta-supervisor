@@ -166,7 +166,7 @@ sup_refresh() {
 	_r_vol=$(selecta_ipc_get volume 2>/dev/null)
 	case $_r_vol in '' | null) _r_vol=0 ;; esac
 	_r_extra=$(jq -n --argjson vol "${_r_vol%%.*}" --arg pid "$$" \
-		--argjson repo "$_r_repo" \
+		--argjson repo "$(selecta_json_or "$_r_repo" '{}')" \
 		'{volume: $vol, pid: ($pid|tonumber), repo: $repo}')
 
 	selecta_state_write "$_r_status" "$_r_src" "$_r_now" "$_r_extra"

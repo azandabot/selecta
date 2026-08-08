@@ -189,10 +189,14 @@ selecta_resolve_net() {
 		fi
 	fi
 
+	# Tags are split inside jq from a --arg string. Building the array with a
+	# nested `jq -R` produced no output at all for an empty input, and
+	# --argjson rejects an empty string, which crashed the whole resolve.
 	_rn_out=$(printf '%s' "$_rn_all" | jq -c \
 		--arg q "$_rn_q" \
-		--argjson tags "$(printf '%s' "$_rn_tags" | jq -R 'split(",")')" '
-		sort_by(-.score) as $c
+		--arg tagstr "$_rn_tags" '
+		($tagstr | split(",") | map(select(length > 0))) as $tags
+		| sort_by(-.score) as $c
 		| { status: (if ($c|length) > 0 then "ok" else "none" end),
 			confidence: (if ($c|length) > 0 then $c[0].score else 0 end),
 			query: $q, normalized: $q, hint_tags: $tags, candidates: $c }')
