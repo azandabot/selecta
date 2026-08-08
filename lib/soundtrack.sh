@@ -13,8 +13,6 @@
 SELECTA_TRACK_CAP=500
 SELECTA_HALFLIFE_DAYS=30
 
-selecta_st_index() { printf '%s/index.json' "$SELECTA_SOUNDTRACKS"; }
-
 # Resolves a key to its file, following aliases. A fork-to-upstream remote swap
 # changes the primary key, so without the alias sweep the repo would silently
 # start a fresh soundtrack and appear to have lost months of history.
@@ -50,8 +48,6 @@ selecta_st_load() {
 	return 1
 }
 
-selecta_st_exists() { selecta_st_load "$1" >/dev/null 2>&1; }
-
 # Created lazily on first successful playback, never on lookup: an empty file
 # for every directory the user has ever opened is noise, not history.
 selecta_st_init() {
@@ -68,7 +64,7 @@ selecta_st_save() {
 	_ss_doc=$2
 	_ss_file=$(selecta_st_file_for "$_ss_key")
 	printf '%s\n' "$_ss_doc" | selecta_atomic_write "$_ss_file" || return 1
-	_ss_idx=$(selecta_st_index)
+	_ss_idx=$SELECTA_SOUNDTRACKS/index.json
 	_ss_cur='{}'
 	[ -s "$_ss_idx" ] && jq -e . "$_ss_idx" >/dev/null 2>&1 && _ss_cur=$(cat "$_ss_idx")
 	printf '%s' "$_ss_cur" | jq \

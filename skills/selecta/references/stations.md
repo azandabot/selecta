@@ -32,7 +32,7 @@ guess.
 
 `data/mood-map.json` maps 117 mood and genre words to stations and tags. Words
 with no station are deliberate: SomaFM does not cover them, so they route to
-radio-browser, Jamendo and the Internet Archive instead. Those include
+radio-browser and the Internet Archive instead. Those include
 `amapiano`, `log drum`, `yanos`, `afrobeats`, `afro house`, `gqom`, `kwaito`,
 `soca`, `highlife`, `classical`, `opera`, `piano`, `gospel`, `k-pop` and
 `anime`.
@@ -98,8 +98,6 @@ When SomaFM has nothing, the resolver falls through automatically:
 
 - **radio-browser** — thousands of community-indexed stations, no key. Only
   entries the directory last verified as working, at 64kbps or better.
-- **Jamendo** — Creative Commons tracks, needs a free client id from
-  <https://devportal.jamendo.com>. Optional; everything else works without it.
 - **Internet Archive netlabels** — Creative Commons albums, no key. The deepest
   keyless track-level catalogue, and the slowest, so it goes last.
 

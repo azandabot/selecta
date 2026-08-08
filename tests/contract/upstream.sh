@@ -59,16 +59,6 @@ t_eq "radio-browser returns stations" "true" "$(printf '%s' "$RB" | jq -r 'lengt
 t_eq "radio-browser keeps url_resolved and lastcheckok" "true" \
 	"$(printf '%s' "$RB" | jq -r 'all(has("url_resolved") and has("lastcheckok") and has("stationuuid"))' 2>/dev/null)"
 
-# --- jamendo ----------------------------------------------------------------
-# The critical one. Jamendo answers 200 on an invalid key and reports the
-# failure in the body. If that ever changes to a real status code, the resolver
-# branches on the wrong thing and this tier fails silently.
-JM=$(get "https://api.jamendo.com/v3.0/tracks/?client_id=selecta_contract_probe&format=json&limit=1")
-t_eq "jamendo still reports auth failure in the body" "failed" \
-	"$(printf '%s' "$JM" | jq -r '.headers.status // "missing"' 2>/dev/null)"
-t_eq "jamendo still exposes headers.error_message" "true" \
-	"$(printf '%s' "$JM" | jq -r '(.headers.error_message // "") | length > 0' 2>/dev/null)"
-
 # --- archive.org ------------------------------------------------------------
 AR=$(get 'https://archive.org/advancedsearch.php?q=collection%3A%28netlabels%29+AND+mediatype%3A%28audio%29+AND+%28ambient%29&fl%5B%5D=identifier&fl%5B%5D=licenseurl&rows=3&output=json')
 t_eq "archive.org returns netlabel docs" "true" \

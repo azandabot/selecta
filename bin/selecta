@@ -70,8 +70,8 @@ selecta - background music for your coding sessions
   selecta config [key [value]]
   selecta uninstall [--purge]
 
-Music comes from SomaFM, radio-browser, Jamendo and the Internet Archive
-netlabels collection. Nothing is downloaded and no account is required.
+Music comes from SomaFM, radio-browser and the Internet Archive netlabels
+collection. Nothing is downloaded and no account is required.
 EOF
 }
 
@@ -471,7 +471,7 @@ cmd_pause() {
 		printf 'Paused.\n'
 		;;
 	radio)
-		selecta_ipc_set pause true
+		selecta_ipc_command '["set_property","pause",true]' >/dev/null
 		printf 'Paused.\n'
 		;;
 	*) selecta_die "$EX_NOTFOUND" "nothing is playing" ;;
@@ -485,7 +485,7 @@ cmd_go() {
 		printf 'Playing.\n'
 		;;
 	radio)
-		selecta_ipc_set pause false
+		selecta_ipc_command '["set_property","pause",false]' >/dev/null
 		printf 'Playing.\n'
 		;;
 	*) selecta_die "$EX_NOTFOUND" "nothing is playing" ;;
@@ -533,12 +533,12 @@ cmd_vol() {
 	}
 	case $_cv in
 	mute)
-		selecta_ipc_set mute true
+		selecta_ipc_command '["set_property","mute",true]' >/dev/null
 		printf 'Muted.\n'
 		return 0
 		;;
 	unmute)
-		selecta_ipc_set mute false
+		selecta_ipc_command '["set_property","mute",false]' >/dev/null
 		printf 'Unmuted.\n'
 		return 0
 		;;
@@ -548,7 +548,7 @@ cmd_vol() {
 	esac
 	[ "$_cv" -lt 0 ] && _cv=0
 	[ "$_cv" -gt 100 ] && _cv=100
-	selecta_ipc_set volume "$_cv"
+	selecta_ipc_command "[\"set_property\",\"volume\",$_cv]" >/dev/null
 	printf 'Volume %s\n' "$_cv"
 }
 
@@ -754,9 +754,6 @@ cmd_doctor() {
 	printf '  status   %s\n' "$(selecta_sl_detect)"
 	printf '  crates   %s\n' \
 		"$(find "$SELECTA_SOUNDTRACKS" -name '*.json' ! -name index.json 2>/dev/null | wc -l | tr -d ' ')"
-	_cd_jam=$(selecta_cfg_get '.jamendo.client_id' '""' | tr -d '"')
-	printf '  jamendo  %s\n' "$([ -n "$_cd_jam" ] && echo "key set" || echo "no key (SomaFM and radio-browser still work)")"
-
 	if selecta_yt_have_key; then
 		printf '  youtube  key set, %s of %s searches left today\n' \
 			"$(selecta_yt_quota_left)" "$SELECTA_YT_DAILY_SEARCHES"
@@ -825,7 +822,7 @@ cmd_config() {
 
 cmd_uninstall() {
 	selecta_sl_uninstall 2>/dev/null || true
-	selecta_ipc_quit
+	selecta_ipc_command '["quit"]' >/dev/null 2>&1 || true
 	if [ "${1:-}" = --purge ]; then
 		printf 'This deletes every crate for every repo. Type PURGE to confirm: '
 		read -r _cu_c
@@ -1001,11 +998,11 @@ main() {
 	case $1 in
 	-h | --help | help)
 		usage
-		exit "$EX_OK"
+		exit 0
 		;;
 	-V | --version | version)
 		printf 'selecta %s\n' "$SELECTA_VERSION"
-		exit "$EX_OK"
+		exit 0
 		;;
 	esac
 

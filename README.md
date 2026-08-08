@@ -171,7 +171,6 @@ second row. `selecta statusline off` restores everything.
 | [YouTube](https://www.youtube.com) | free, yours | any specific song by name. Opens a small visible player |
 | [SomaFM](https://somafm.com) | no | 46 curated, ad-free, listener-supported stations |
 | [radio-browser](https://www.radio-browser.info) | no | thousands of community-indexed stations |
-| [Jamendo](https://www.jamendo.com) | free, optional | Creative Commons tracks, real text search |
 | [Internet Archive netlabels](https://archive.org/details/netlabels) | no | Creative Commons albums |
 
 **Nothing is downloaded.** Streams are played, never stored. Radio needs no
@@ -259,8 +258,7 @@ Resolution is tiered, and the first two tiers work offline:
 0  exact station id, title or your own alias      offline
 1  mood vocabulary and catalogue scoring          offline (46-station seed baked in)
 2  radio-browser                                  keyless
-3  Jamendo                                        free key, optional
-4  Internet Archive netlabels                     keyless
+3  Internet Archive netlabels                     keyless
 ```
 
 Crates live in `~/.claude/selecta/`, keyed by repository. ssh and https remotes

@@ -7,12 +7,6 @@
 # open a URL at all and exists only for local files.
 
 selecta_engine() {
-	case ${SELECTA_ENGINE:-auto} in
-	mpv | ffplay | afplay)
-		printf '%s' "$SELECTA_ENGINE"
-		return 0
-		;;
-	esac
 	if selecta_have mpv; then
 		printf 'mpv'
 	elif selecta_have ffplay; then

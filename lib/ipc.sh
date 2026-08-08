@@ -50,10 +50,3 @@ selecta_ipc_get() {
 	printf '%s' "$_ig_reply" | jq -e -r 'select(.error == "success") | .data' 2>/dev/null
 }
 
-selecta_ipc_set() {
-	selecta_ipc_command "[\"set_property\",\"$1\",$2]" >/dev/null
-}
-
-selecta_ipc_quit() {
-	selecta_ipc_command '["quit"]' >/dev/null 2>&1 || true
-}

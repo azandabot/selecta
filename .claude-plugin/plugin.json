@@ -26,14 +26,6 @@
       "required": false,
       "sensitive": false,
       "default": ""
-    },
-    "jamendo_client_id": {
-      "type": "string",
-      "title": "Jamendo client ID (optional)",
-      "description": "Free key from https://devportal.jamendo.com that enables text search over Creative Commons tracks. Leave blank: SomaFM and radio-browser need no key.",
-      "required": false,
-      "sensitive": false,
-      "default": ""
     }
   }
 }

@@ -26,13 +26,11 @@ SELECTA_SEGMENT=$SELECTA_RUN/segment
 SELECTA_HEARTBEAT=$SELECTA_RUN/heartbeat
 SELECTA_PIDFILE=$SELECTA_RUN/supervisor.pid
 SELECTA_LOCKDIR=$SELECTA_RUN/supervisor.lock
-SELECTA_CONTROL_SOCK=$SELECTA_RUN/control.sock
 SELECTA_MPV_SOCK=$SELECTA_RUN/mpv.sock
 
 SELECTA_LOG_MAX_BYTES=1048576
 
 # Exit codes. Anything non-zero must carry meaning; callers branch on these.
-EX_OK=0
 EX_USAGE=2
 EX_UNWRITABLE=3
 EX_MISSING_DEP=4
@@ -46,7 +44,6 @@ EX_NOTFOUND=6
 
 selecta_now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-selecta_info() { printf '%s\n' "$*"; }
 selecta_warn() { printf 'selecta: %s\n' "$*" >&2; }
 
 selecta_die() {
@@ -116,11 +113,6 @@ selecta_realpath() {
 }
 
 selecta_have() { command -v "$1" >/dev/null 2>&1; }
-
-selecta_require() {
-	selecta_have "$1" && return 0
-	selecta_die "$EX_MISSING_DEP" "$1 is required but not installed. Run: /selecta doctor"
-}
 
 # --- filesystem -------------------------------------------------------------
 
@@ -195,20 +187,6 @@ selecta_pid_is_supervisor() {
 }
 
 # --- json -------------------------------------------------------------------
-
-selecta_json_get() {
-	# selecta_json_get <file> <jq-filter> [default]
-	_jg_file=$1
-	_jg_filter=$2
-	_jg_default=${3:-}
-	[ -f "$_jg_file" ] || {
-		printf '%s' "$_jg_default"
-		return 0
-	}
-	_jg_out=$(jq -r "$_jg_filter // empty" "$_jg_file" 2>/dev/null)
-	[ -n "$_jg_out" ] || _jg_out=$_jg_default
-	printf '%s' "$_jg_out"
-}
 
 # --- config -----------------------------------------------------------------
 

@@ -40,20 +40,14 @@ selecta_httpd_start() {
 	return "$EX_NETWORK"
 }
 
+# Only Chrome, and only because app mode gives a chromeless window at a size we
+# can set. Every other browser goes through the platform opener, which already
+# knows how to open a URL.
 _selecta_chrome_bin() {
-	for _cb in \
-		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-		"/Applications/Chromium.app/Contents/MacOS/Chromium" \
-		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" \
-		"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"; do
-		[ -x "$_cb" ] && {
+	for _cb in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+		"$(command -v google-chrome 2>/dev/null)"; do
+		[ -n "$_cb" ] && [ -x "$_cb" ] && {
 			printf '%s' "$_cb"
-			return 0
-		}
-	done
-	for _cb in google-chrome chromium chromium-browser microsoft-edge brave-browser; do
-		selecta_have "$_cb" && {
-			command -v "$_cb"
 			return 0
 		}
 	done

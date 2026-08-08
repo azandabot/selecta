@@ -34,21 +34,6 @@ If the second attempt is also empty, present three real candidates from
 | `could not reach that stream` | network, or the provider is down | Check connectivity. SomaFM tier 1 works from a baked catalogue offline, but playback itself always needs the network. |
 | radio-browser results are empty | their directory currently resolves to a single host, so outages are common | Expected. selecta falls through to the Internet Archive automatically. |
 
-## Jamendo
-
-Jamendo returns **HTTP 200 even when the key is invalid**, reporting the failure
-in the body. selecta checks the body, so a bad key shows up as
-`jamendo` in `selecta doctor` rather than as silent empty results.
-
-The key is optional. SomaFM, radio-browser and the Internet Archive all work
-without one. Set it with:
-
-```
-selecta config jamendo.client_id YOUR_ID
-```
-
-Free from <https://devportal.jamendo.com>.
-
 ## Status line
 
 | Symptom | Cause | Remedy |

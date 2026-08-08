@@ -2,8 +2,7 @@
 # Networked resolver tiers.
 #
 # Tier 2  radio-browser   keyless, thousands of stations
-# Tier 3  Jamendo         needs a free client id, Creative Commons tracks
-# Tier 4  Archive.org     keyless, the netlabels collection
+# Tier 3  Archive.org     keyless, the netlabels collection
 #
 # Reached only when tiers 0-1 come back short, and every one of them is
 # best-effort: an upstream being down drops to the next tier rather than
@@ -94,34 +93,6 @@ selecta_rb_stream() {
 	printf '%s\n' "$_rbs_url"
 }
 
-# --- tier 3: jamendo --------------------------------------------------------
-# Jamendo answers HTTP 200 on an invalid key and reports the failure in the
-# body. Branching on the status code would silently ship a broken tier.
-selecta_jamendo_search() {
-	_js_tags=$1
-	_js_key=$(selecta_cfg_get '.jamendo.client_id' '""' | tr -d '"')
-	[ -n "$_js_key" ] || _js_key=${JAMENDO_CLIENT_ID:-}
-	[ -n "$_js_key" ] || return 1
-
-	_js_enc=$(printf '%s' "$_js_tags" | jq -sRr @uri)
-	_js_j=$(_rn_get "https://api.jamendo.com/v3.0/tracks/?client_id=$_js_key&format=json&limit=40&include=musicinfo&audioformat=mp32&fuzzytags=$_js_enc&order=popularity_total")
-	[ -n "$_js_j" ] || return 1
-
-	if [ "$(printf '%s' "$_js_j" | jq -r '.headers.status // "failed"')" != success ]; then
-		selecta_log warn "jamendo: $(printf '%s' "$_js_j" | jq -r '.headers.error_message // "unknown error"')"
-		return 1
-	fi
-	printf '%s' "$_js_j" | jq -c --arg tags "$_js_tags" '
-		[ .results[]? | select((.audio // "") != "")
-		  | { id: ("jamendo:" + .id), kind: "track", provider: "jamendo",
-			  title: (.artist_name + " — " + .name),
-			  genre: ((.musicinfo.tags.genres // []) | join(" ")),
-			  description: (.album_name // ""),
-			  score: 0.8, why: ("jamendo: " + $tags),
-			  resolver: { type: "jamendo", id: .id, url: .audio, query: $tags } } ]
-		| .[0:8]' 2>/dev/null
-}
-
 # --- tier 4: archive.org netlabels ------------------------------------------
 # The deepest keyless track-level catalog available, and the reason zero-config
 # text search over real Creative Commons music is possible at all. Two round
@@ -186,11 +157,6 @@ selecta_resolve_net() {
 			fi
 		fi
 	done
-	if [ "$(printf '%s' "$_rn_all" | jq 'length')" -eq 0 ]; then
-		if _rn_jm=$(selecta_jamendo_search "$_rn_tags"); then
-			[ -n "$_rn_jm" ] && _rn_all=$(printf '%s\n%s' "$_rn_all" "$_rn_jm" | jq -s 'add')
-		fi
-	fi
 	if [ "$(printf '%s' "$_rn_all" | jq 'length')" -eq 0 ]; then
 		if _rn_ar=$(selecta_archive_search "$_rn_first"); then
 			[ -n "$_rn_ar" ] && _rn_all=$(printf '%s\n%s' "$_rn_all" "$_rn_ar" | jq -s 'add')

@@ -3,7 +3,7 @@
 #
 # Tier 0  exact station id, exact title, or a user alias      offline, instant
 # Tier 1  mood vocabulary and token scoring over the catalog  offline-capable
-# Tier 2+ radio-browser, Jamendo, Archive.org                 lib/resolve-net.sh
+# Tier 2+ radio-browser, Archive.org                          lib/resolve-net.sh
 #
 # The model never builds a stream URL. It calls `selecta resolve --json` and,
 # when the answer is ambiguous, rewrites the query into catalog vocabulary and

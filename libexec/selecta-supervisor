@@ -40,20 +40,15 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/soundtrack.sh"
 
 MODE=monitor
-ONCE=0
 for _a in "$@"; do
 	case $_a in
 	--monitor) MODE=monitor ;;
 	--detached) MODE=detached ;;
-	--once)
-		ONCE=1
-		MODE=once
-		;;
 	esac
 done
 
 # Rule 1. Anything that must reach the user goes through sup_fatal.
-[ "$ONCE" -eq 1 ] || exec >/dev/null
+exec >/dev/null
 
 MPV_PID=''
 FIFO=''
@@ -68,7 +63,7 @@ sup_fatal() {
 # shellcheck disable=SC2329
 sup_cleanup() {
 	sup_bank_seconds
-	selecta_ipc_quit
+	selecta_ipc_command '["quit"]' >/dev/null 2>&1 || true
 	[ -n "$MPV_PID" ] && kill "$MPV_PID" 2>/dev/null
 	[ -n "$FIFO" ] && rm -f "$FIFO"
 	rm -f "$SELECTA_MPV_SOCK" "$SELECTA_PIDFILE" 2>/dev/null
@@ -207,22 +202,6 @@ sup_watchdog() {
 	kill -0 "$MPV_PID" 2>/dev/null || return 1
 	return 0
 }
-
-if [ "$ONCE" -eq 1 ]; then
-	# Test mode: prove the pipeline without holding the session open.
-	_once_url=${SELECTA_ONCE_URL:-}
-	if [ -n "$_once_url" ]; then
-		selecta_ipc_command "[\"loadfile\",\"$_once_url\"]" >/dev/null
-	fi
-	_i=0
-	while [ "$_i" -lt 30 ]; do
-		_i=$((_i + 1))
-		_idle=$(selecta_ipc_get core-idle 2>/dev/null)
-		if [ "$_idle" = false ]; then sup_refresh playing; else sup_refresh buffering; fi
-		sleep 0.5
-	done
-	exit 0
-fi
 
 # Persistent event connection. The fifo keeps nc's stdin open so mpv does not
 # see EOF and drop us; without it the connection closes immediately.
