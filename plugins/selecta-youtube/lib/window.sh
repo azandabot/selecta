@@ -68,6 +68,8 @@ selecta_window_open() {
 			--window-size=$SELECTA_WIN_W,$SELECTA_WIN_H \
 			--no-first-run \
 			--no-default-browser-check \
+			--disable-session-crashed-bubble \
+			--hide-crash-restore-bubble \
 			--autoplay-policy=no-user-gesture-required \
 			</dev/null >/dev/null 2>&1 &
 		return 0

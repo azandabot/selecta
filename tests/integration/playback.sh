@@ -12,7 +12,8 @@ set -u
 SELECTA_HOME=${TMPDIR:-/tmp}/selecta-tests/$$-playback
 export SELECTA_HOME
 SELECTA_AO=null
-export SELECTA_AO
+SELECTA_BANK_EVERY=2
+export SELECTA_AO SELECTA_BANK_EVERY
 rm -rf "$SELECTA_HOME"
 mkdir -p "$SELECTA_HOME/run"
 
@@ -57,7 +58,7 @@ t_eq "the supervisor brings mpv up" "true" \
 	"$(wait_for 'selecta_ipc_up' 80 && echo true || echo false)"
 
 if selecta_ipc_up; then
-	printf '{"id":"test:tone","kind":"station","provider":"test","title":"Test Tone","repo":{"key":"remote:github.com/t/t","display_name":"t"}}\n' \
+	printf '{"id":"test:tone","kind":"station","provider":"test","title":"Test Tone","repo":{"key":"remote:github.com/t/t","display_name":"t","scope":"remote","branch":"main","commit":"abc1234","aliases":[]}}\n' \
 		>"$SELECTA_RUN/source.json"
 	selecta_ipc_command "[\"loadfile\",\"$TONE\"]" >/dev/null
 
@@ -82,9 +83,25 @@ if selecta_ipc_up; then
 	t_eq "pause is reflected in state" "true" \
 		"$(wait_for '[ "$(jq -r .status "$SELECTA_STATE" 2>/dev/null)" = paused ]' 40 && echo true || echo false)"
 
+	# Listening time must be time spent playing, not wall clock. It used to be
+	# the latter, so an idle supervisor banked the whole afternoon.
+	banked() {
+		jq -r '.totals.seconds // 0' \
+			"$SELECTA_SOUNDTRACKS"/remote*.json 2>/dev/null | head -1
+	}
+	_paused_at=$(banked)
+	sleep 6
+	t_eq "paused time is not counted as listening" "$_paused_at" "$(banked)"
+
 	selecta_ipc_command '["set_property","pause",false]' >/dev/null
 	t_eq "unpause returns to playing" "true" \
 		"$(wait_for '[ "$(jq -r .status "$SELECTA_STATE" 2>/dev/null)" = playing ]' 40 && echo true || echo false)"
+
+	t_eq "playing time is counted" "true" "$(
+		wait_for '[ "$(jq -r ".totals.seconds // 0" \
+			"$SELECTA_SOUNDTRACKS"/remote*.json 2>/dev/null | head -1)" -gt 0 ]' 40 &&
+			echo true || echo false
+	)"
 
 	# A stop holds the last line briefly, so a station change does not blank
 	# the bar and bring it back a second later.

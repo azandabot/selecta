@@ -54,8 +54,12 @@ export SELECTA_ROOT
 . "$SELECTA_ROOT/lib/repo.sh"
 # shellcheck source=lib/player.sh
 . "$SELECTA_ROOT/lib/player.sh"
+# shellcheck source=lib/ipc.sh
+. "$SELECTA_ROOT/lib/ipc.sh"
 # shellcheck source=lib/state.sh
 . "$SELECTA_ROOT/lib/state.sh"
+# shellcheck source=lib/nowplaying.sh
+. "$SELECTA_ROOT/lib/nowplaying.sh"
 # shellcheck source=lib/soundtrack.sh
 . "$SELECTA_ROOT/lib/soundtrack.sh"
 # shellcheck source=lib/youtube.sh
@@ -177,6 +181,7 @@ yt_start() {
 	_yt_cands=$1
 	_yt_query=${2:-}
 	selecta_np_pause_others
+	selecta_stop_radio
 	jq -nc --argjson c "$(selecta_json_or "$_yt_cands" '[]')" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		--arg q "$_yt_query" \
@@ -221,6 +226,7 @@ cmd_replay() {
 	fi
 	selecta_ensure_dirs || return "$EX_UNWRITABLE"
 	selecta_np_pause_others
+	selecta_stop_radio
 	jq -nc --argjson c "[$(printf '%s' "$_cr_card" | jq -c --arg v "$_cr_vid" '. + {videoId: $v}')]" \
 		--argjson repo "$(selecta_json_or "$(repo_json)" '{}')" \
 		'{candidates: $c, repo: $repo, query: "", attempt: 0, seen: []}' |
@@ -299,6 +305,32 @@ cmd_state() {
 		selecta_log warn "yt: no embeddable candidate left after retries"
 		;;
 	esac
+
+	# Listening time, credited from how far the track actually advanced since
+	# the last report. Wall clock would count a paused tab; a raw position
+	# would count a seek. Anything outside one heartbeat's worth of progress
+	# is a seek, a reload or a new track, and is not credited.
+	if [ "$_ys_status" = playing ]; then
+		_ys_pos=$(printf '%s' "$_ys_in" | jq -r '.position // 0' 2>/dev/null)
+		_ys_vid=$(printf '%s' "$_ys_in" | jq -r '.videoId // ""' 2>/dev/null)
+		_ys_mark=$SELECTA_RUN/yt-progress
+		_ys_prev_vid=''
+		_ys_prev_pos=0
+		if [ -s "$_ys_mark" ]; then
+			IFS=' ' read -r _ys_prev_vid _ys_prev_pos <"$_ys_mark" 2>/dev/null || true
+		fi
+		case ${_ys_prev_pos:-} in '' | *[!0-9]*) _ys_prev_pos=0 ;; esac
+		if [ "$_ys_vid" = "${_ys_prev_vid:-}" ]; then
+			_ys_delta=$((_ys_pos - _ys_prev_pos))
+			if [ "$_ys_delta" -gt 0 ] && [ "$_ys_delta" -le 45 ]; then
+				_ys_rk=$(printf '%s' "$_ys_repo" | jq -r '.key // ""')
+				_ys_sid=$(printf '%s' "$_ys_src" | jq -r '.id // ""')
+				[ -n "$_ys_rk" ] && [ -n "$_ys_sid" ] &&
+					selecta_st_add_seconds "$_ys_rk" "$_ys_sid" "$_ys_delta" || true
+			fi
+		fi
+		printf '%s %s\n' "$_ys_vid" "$_ys_pos" | selecta_atomic_write "$_ys_mark"
+	fi
 
 	selecta_state_write "$_ys_status" "$_ys_src" "$_ys_now" "$_ys_extra"
 

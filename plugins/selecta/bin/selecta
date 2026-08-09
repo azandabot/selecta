@@ -157,6 +157,7 @@ stream_for() {
 start_source() {
 	_ss_card=$1
 	selecta_np_pause_others
+	selecta_yt_stop_window
 	_ss_urls=$(stream_for "$(printf '%s' "$_ss_card" | jq -r .id)") || {
 		printf 'selecta: could not reach %s\n' \
 			"$(printf '%s' "$_ss_card" | jq -r .title)" >&2

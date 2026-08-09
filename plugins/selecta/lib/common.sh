@@ -307,7 +307,28 @@ selecta_yt_window_close() {
 	_wc_prof=$SELECTA_HOME/browser
 	selecta_have pkill || return 0
 	pkill -f -- "--user-data-dir=$_wc_prof" 2>/dev/null || true
+	_wc_n=0
+	while [ "$_wc_n" -lt 60 ]; do
+		pgrep -f -- "--user-data-dir=$_wc_prof" >/dev/null 2>&1 || break
+		_wc_n=$((_wc_n + 1))
+		sleep 0.1
+	done
+	# Still there after six seconds: it is not going to leave politely, and a
+	# window nobody can close is worse than one that disappears.
+	if pgrep -f -- "--user-data-dir=$_wc_prof" >/dev/null 2>&1; then
+		pkill -9 -f -- "--user-data-dir=$_wc_prof" 2>/dev/null || true
+		sleep 0.5
+	fi
 	rm -f "$SELECTA_RUN/yt-cmd.json" 2>/dev/null || true
+	return 0
+}
+
+# The other direction: asking for radio makes the player window pointless, and
+# a window left open is what accumulates.
+selecta_yt_stop_window() {
+	selecta_window_up 2>/dev/null || return 0
+	selecta_yt_queue '{"action":"stop"}'
+	selecta_yt_window_close
 	return 0
 }
 

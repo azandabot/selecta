@@ -129,17 +129,30 @@ sup_source() {
 LAST_TRACK=''
 LAST_SOURCE=''
 LAST_REPO_KEY=''
-SOURCE_SINCE=0
+PLAYING_SECS=0
+SELECTA_BANK_EVERY=${SELECTA_BANK_EVERY:-60}
 
-# Credits elapsed listening time to whichever source was playing. Called on
-# source change and on the way out, so a session that ends mid-track still
-# counts toward the repo's totals.
+# Credits time actually spent playing to whichever source was playing it.
+# Called when the accumulator fills, on source change, and on the way out, so
+# a session that ends mid-track still counts.
 # shellcheck disable=SC2329
 sup_bank_seconds() {
-	[ -n "$LAST_SOURCE" ] && [ -n "$LAST_REPO_KEY" ] && [ "$SOURCE_SINCE" -gt 0 ] || return 0
-	_bs=$(($(date +%s) - SOURCE_SINCE))
-	SOURCE_SINCE=0
+	[ "$PLAYING_SECS" -gt 0 ] || return 0
+	[ -n "$LAST_SOURCE" ] && [ -n "$LAST_REPO_KEY" ] || {
+		PLAYING_SECS=0
+		return 0
+	}
+	_bs=$PLAYING_SECS
+	PLAYING_SECS=0
 	selecta_st_add_seconds "$LAST_REPO_KEY" "$LAST_SOURCE" "$_bs" || true
+}
+
+# One tick of actual playback. Paused, buffering and stopped never reach here.
+# shellcheck disable=SC2329
+sup_tick_played() {
+	PLAYING_SECS=$((PLAYING_SECS + SELECTA_TICK))
+	[ "$PLAYING_SECS" -ge "$SELECTA_BANK_EVERY" ] && sup_bank_seconds
+	return 0
 }
 
 sup_refresh() {
@@ -186,16 +199,19 @@ sup_refresh() {
 		sup_bank_seconds
 		LAST_SOURCE=$_r_sid
 		LAST_REPO_KEY=$(printf '%s' "$_r_repo" | jq -r '.key // ""')
-		SOURCE_SINCE=$(date +%s)
 		selecta_st_touch_source "$_r_repo" "$(printf '%s' "$_r_src" | jq -c 'del(.repo)')" || true
 	fi
-
 	# Record the track once, on change, not on every event.
 	_r_key=$(printf '%s' "$_r_now" | jq -r '"\(.artist)|\(.title)"')
 	if [ "$_r_key" != "$LAST_TRACK" ] && [ "$_r_key" != "|" ] && [ "$_r_status" = playing ]; then
 		LAST_TRACK=$_r_key
 		selecta_st_record_track "$_r_src" "$_r_now" || true
 	fi
+
+	if [ "$_r_status" = playing ]; then
+		sup_tick_played
+	fi
+	return 0
 }
 
 sup_watchdog() {
@@ -231,6 +247,10 @@ sup_tick() {
 		_t_paused=$(selecta_ipc_get pause 2>/dev/null)
 		_t_idle=$(selecta_ipc_get core-idle 2>/dev/null)
 		_t_path=$(selecta_ipc_get path 2>/dev/null)
+		if { [ -z "$_t_path" ] || [ "$_t_path" = null ]; } && selecta_window_up; then
+			_t_np=$(selecta_np_probe 2>/dev/null) && sup_write_foreign "$_t_np"
+			return 0
+		fi
 		if [ -z "$_t_path" ] || [ "$_t_path" = null ]; then
 			sup_refresh stopped
 			sup_idle_segment

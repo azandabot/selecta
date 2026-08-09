@@ -46,11 +46,14 @@ with timeout of 2 seconds
 				set theArtist to artist of current track
 				set theName to name of current track
 			end try
+			if theArtist is missing value then set theArtist to ""
+			if theName is missing value then set theName to ""
 			if theName is "" then
 				try
 					set theName to current stream title
 				end try
 			end if
+			if theName is missing value then set theName to ""
 			if theName is "" then return ""
 			return theState & tab & theArtist & tab & theName
 		on error
@@ -192,13 +195,24 @@ _np_selecta() {
 
 # --- entry point --------------------------------------------------------------
 
+# AppleScript's null coerces to the literal words "missing value" the moment
+# anything stringifies it. It has reached the status line once; it does not get
+# a second chance from any adapter.
+_np_sane() {
+	case $1 in
+	*"missing value"*) return 1 ;;
+	esac
+	[ -n "$(printf '%s' "$1" | cut -f3)" ] || return 1
+	printf '%s\n' "$1"
+}
+
 selecta_np_probe() {
 	[ "$(selecta_cfg_get '.nowplaying.disabled' false)" = true ] && return 1
-	_np_selecta && return 0
-	_np_youtube && return 0
+	_np_out=$(_np_selecta) && _np_sane "$_np_out" && return 0
+	_np_out=$(_np_youtube) && _np_sane "$_np_out" && return 0
 	case $(uname -s) in
-	Darwin) _np_darwin && return 0 ;;
-	Linux) _np_linux && return 0 ;;
+	Darwin) _np_out=$(_np_darwin) && _np_sane "$_np_out" && return 0 ;;
+	Linux) _np_out=$(_np_linux) && _np_sane "$_np_out" && return 0 ;;
 	esac
 	return 1
 }

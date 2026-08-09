@@ -77,6 +77,22 @@ t_eq "an open but idle app reports nothing" "1" "$(
 	echo $?
 )"
 
+# --- AppleScript's null --------------------------------------------------------
+# `name of current track` returns `missing value` when nothing is loaded, and
+# that is not the empty string, so it sailed past every emptiness check and the
+# status line displayed the literal words "missing value" as the track title.
+# An app left open with nothing playing hits this every time.
+mkstub osascript 'printf "playing\t\tmissing value\n"'
+t_eq "a missing title is not a track" "1" "$(
+	probe >/dev/null
+	echo $?
+)"
+mkstub osascript 'printf "playing\tmissing value\tReal Title\n"'
+t_eq "a missing artist never reaches the bar" "0" \
+	"$(probe | grep -c 'missing value' || true)"
+mkstub osascript 'printf "playing\tReal Artist\tReal Title\n"'
+t_eq "a real track still gets through" "Real Title" "$(field "$(probe)" 3)"
+
 # --- the TCC refusal ---------------------------------------------------------
 # A denied Automation prompt fails identically forever. Left unlatched that is
 # a wasted 64ms fork every two seconds for the life of the machine.

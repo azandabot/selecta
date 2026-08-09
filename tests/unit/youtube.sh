@@ -109,6 +109,51 @@ t_eq "an httpd.json with no origin means no window" "1" "$(
 	echo $?
 )"
 
+# --- youtube listening time ---------------------------------------------------
+# Every YouTube source sat at 0s in the crate, because the page only reported
+# on state change and nothing ever measured progress. Listening time is what
+# the crate ranks and draws bars from, so those sources were invisible.
+# shellcheck source=lib/repo.sh
+. "$SELECTA_ROOT/lib/repo.sh"
+# shellcheck source=lib/soundtrack.sh
+. "$SELECTA_ROOT/lib/soundtrack.sh"
+# shellcheck source=lib/state.sh
+. "$SELECTA_ROOT/lib/state.sh"
+
+YTBIN=$SELECTA_YT_ROOT/bin/selecta-youtube
+printf '%s\n' "$SELECTA_ROOT" >"$SELECTA_HOME/root"
+YREPO='{"key":"remote:github.com/a/b","display_name":"b","scope":"remote","branch":"main","commit":"c0ffee","aliases":[]}'
+post() {
+	printf '{"status":"%s","videoId":"vid1","position":%s,"duration":300,
+		"title":"T","artist":"A","sourceId":"youtube:vid1","repo":%s}\n' \
+		"$1" "$2" "$YREPO" | SELECTA_HOME=$SELECTA_HOME "$YTBIN" __state
+}
+secs() { selecta_st_load 'remote:github.com/a/b' 2>/dev/null | jq -r '.totals.seconds // 0'; }
+
+post playing 0
+post playing 30
+t_eq "progress between reports is credited" "30" "$(secs)"
+post playing 60
+t_eq "and keeps accruing" "60" "$(secs)"
+
+# A seek forward is not thirty minutes of listening.
+post playing 2400
+t_eq "a seek is not credited" "60" "$(secs)"
+
+# Nor is rewinding negative time.
+post playing 10
+t_eq "a rewind is not credited" "60" "$(secs)"
+
+# A different video restarts the measurement rather than crediting the gap.
+printf '{"status":"playing","videoId":"vid2","position":90,"duration":300,
+	"title":"T2","artist":"A","sourceId":"youtube:vid2","repo":%s}\n' "$YREPO" |
+	SELECTA_HOME=$SELECTA_HOME "$YTBIN" __state
+t_eq "a new video does not inherit the old position" "60" "$(secs)"
+
+# Paused reports must not move the clock at all.
+post paused 200
+t_eq "paused reports credit nothing" "60" "$(secs)"
+
 # --- the window is a singleton ---------------------------------------------
 # Each play used to launch another browser window, because a page whose server
 # has restarted polls a port that no longer answers and is treated as gone
@@ -142,6 +187,47 @@ t_eq "closing drops any queued command" "0" "$(
 	selecta_yt_queue '{"action":"load"}'
 	selecta_yt_window_close
 	[ -f "$SELECTA_RUN/yt-cmd.json" ] && echo 1 || echo 0
+)"
+
+# --- one backend at a time ------------------------------------------------
+# selecta arguing with itself was worse than the foreign-player case: radio
+# kept playing under a YouTube track, and the radio's state overwrote the
+# YouTube one, so the banner and the status line both named the wrong song.
+# shellcheck source=lib/ipc.sh
+. "$SELECTA_ROOT/lib/ipc.sh"
+
+: >"$SELECTA_RUN/want-mpv"
+selecta_stop_radio
+t_eq "starting youtube stops radio wanting to come back" "0" \
+	"$([ -f "$SELECTA_RUN/want-mpv" ] && echo 1 || echo 0)"
+t_eq "stopping radio that is not running still succeeds" "0" "$(
+	selecta_stop_radio
+	echo $?
+)"
+
+# And the other direction: asking for radio closes the window rather than
+# leaving it muted on screen.
+mkdir -p "$SELECTA_HOME/browser"
+sh -c 'sleep 30; :' fake-browser --user-data-dir="$SELECTA_HOME/browser" &
+WIN=$!
+printf '{"origin":"http://127.0.0.1:1","url":"x"}\n' >"$SELECTA_RUN/httpd.json"
+mkstub_curl() {
+	mkdir -p "$SELECTA_HOME/stub2"
+	printf '#!/bin/sh\nprintf %s\n' "'{\"ok\":true,\"page_age\":0.1}'" \
+		>"$SELECTA_HOME/stub2/curl"
+	chmod +x "$SELECTA_HOME/stub2/curl"
+}
+mkstub_curl
+sleep 0.5
+PATH="$SELECTA_HOME/stub2:$PATH" selecta_yt_stop_window
+sleep 0.5
+t_eq "starting radio closes the player window" "gone" \
+	"$(kill -0 "$WIN" 2>/dev/null && echo alive || echo gone)"
+wait "$WIN" 2>/dev/null || true
+rm -f "$SELECTA_RUN/httpd.json"
+t_eq "closing a window that is not open still succeeds" "0" "$(
+	selecta_yt_stop_window
+	echo $?
 )"
 
 # The pointer, not a glob of the versioned plugin cache path.

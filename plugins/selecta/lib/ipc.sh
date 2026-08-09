@@ -100,3 +100,14 @@ selecta_ipc_get() {
 	[ -n "$_ig_reply" ] || return 1
 	printf '%s' "$_ig_reply" | jq -e -r 'select(.error == "success") | .data' 2>/dev/null
 }
+
+# Starting one backend has to silence the other. selecta_np_pause_others deals
+# with other applications; this is selecta arguing with itself, which is worse:
+# radio kept playing under a YouTube track, and the radio's state overwrote the
+# YouTube one, so the banner and the status line both named the wrong song.
+selecta_stop_radio() {
+	rm -f "$SELECTA_RUN/want-mpv" 2>/dev/null || true
+	selecta_ipc_up 2>/dev/null || return 0
+	selecta_ipc_command '["stop"]' >/dev/null 2>&1 || true
+	return 0
+}

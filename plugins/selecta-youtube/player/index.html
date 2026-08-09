@@ -120,6 +120,16 @@
     api("/state", payload).catch(function () {});
   }
 
+  // Progress heartbeat. Without it the shell only ever hears about a track at
+  // its start and its end, so a listen interrupted by closing the window --
+  // which fires no event -- counts for nothing.
+  setInterval(function () {
+    if (player && player.getPlayerState &&
+        player.getPlayerState() === YT.PlayerState.PLAYING) {
+      report("playing");
+    }
+  }, 30000);
+
   function clock(t) {
     if (!isFinite(t) || t < 0) { return "–:––"; }
     var m = Math.floor(t / 60), s2 = Math.floor(t % 60);

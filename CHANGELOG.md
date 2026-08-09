@@ -48,6 +48,30 @@ Two things need action:
   which its own header calls the reason selecta exists, had no coverage at all.
 
 ### Fixed
+- **`selecta-youtube play` was completely broken.** It called a function from a
+  library it did not source, which under `set -eu` is exit 127. Found by
+  running the binary; no unit test reached the line. `tests/unit/wiring.sh` now
+  checks that every function each binary calls is defined somewhere it sources.
+- **The player server could not start at all.** A module-level constant renamed
+  during the plugin split left one use of the old name behind, so every YouTube
+  track died with NameError at import. `compile()` cannot see an undefined
+  name; the new integration suite starts the server for real.
+- **Radio and YouTube played at the same time.** Each backend now stops the
+  other. The radio's state was also overwriting the YouTube one, so the banner
+  and the status line both named the wrong song.
+- **An idle mpv overwrote the player window's state every two seconds**, so
+  `selecta status` said stopped and the bar went blank while music was audibly
+  playing. An idle mpv owns nothing.
+- **Listening time counted wall clock, not playing time.** Pause, stop and an
+  idle supervisor all accrued: one repo showed 6h against a few seconds of
+  playback, and listening time is the crate's headline number.
+- **YouTube listening time was never counted at all.** The page only reported
+  on state change, so every YouTube source sat at 0s with an empty bar and
+  ranked last. The page now sends a progress heartbeat, and the shell credits
+  the distance travelled rather than wall clock, so a seek cannot bank an hour.
+- **AppleScript's `missing value` reached the status line as a track title.**
+  It is not the empty string, so it passed every emptiness check. An app left
+  open with nothing loaded hit this every time.
 - **Starting selecta while Spotify or Apple Music was playing gave you both at
   once.** Nothing in the audio stack prevents that. selecta now pauses what is
   already playing before it starts, behind the same `pgrep` gate as the probe
