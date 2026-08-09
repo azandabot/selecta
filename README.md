@@ -303,15 +303,19 @@ While developing, run the repo directly:
 ./tests/run.sh
 ```
 
-To refresh an installed copy you must bump the version, or the update is a
-no-op:
+`claude plugin update` compares versions, so with the version unchanged it is
+a no-op: it reports success and `/selecta` keeps running the code from whenever
+you last bumped. To actually refresh an installed copy:
 
 ```bash
-# bump "version" in plugins/<name>/.claude-plugin/plugin.json
-claude plugin marketplace update azandabot-selecta
-claude plugin update selecta@azandabot-selecta
-# then restart the session
+tools/reinstall.sh              # both plugins
+tools/reinstall.sh selecta      # just the one
 ```
+
+It validates the manifests first, deletes the cached copy, reinstalls, and
+diffs the result against the tree so a silent partial install cannot pass.
+Restart the session afterwards: skills, commands and hooks are read at session
+start. The `selecta` binaries work immediately either way.
 
 `selecta doctor` prints the directory it's running from, so you can always tell
 which copy answered.
