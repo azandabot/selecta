@@ -687,8 +687,13 @@ cmd_statusline() {
 		# means a fresh install opens on something that stopped days ago. The
 		# crates are the durable record; this file is session scratch, and the
 		# supervisor rewrites it from the live player within a tick.
+		# The hint retires once you have played something, so switching the bar
+		# on while nothing plays produced an empty bar and no confirmation:
+		# the same "did that work?" the restart message caused. Turning the
+		# status line on is the moment the affordance is for, so it comes
+		# back, and retires again the next time anything plays.
 		rm -f "$SELECTA_SEGMENT" "$SELECTA_STATE" "$SELECTA_RUN/idle-since" \
-			2>/dev/null || true
+			"$SELECTA_HOME/.played-once" 2>/dev/null || true
 		ensure_supervisor 2>/dev/null || true
 		# Waiting on the file existing is not the same as waiting on it having
 		# something to show: the first version printed an empty preview under
