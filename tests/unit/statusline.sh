@@ -68,10 +68,14 @@ t_eq "TERM=dumb uses the plain variant" "PLAIN" "$(TERM=dumb run 40)"
 # Someone who has never played anything gets an affordance in the bar. Someone
 # who has gets an empty bar when nothing is playing. The two states used to be
 # decided by timing, which showed up as a flicker.
-t_eq "a new install is offered the command" "1" "$(
-	rm -f "$SELECTA_HOME/.played-once"
-	selecta_segment_lines_plain stopped "" "" "" "" | cut -f1 | grep -c '/selecta play'
-)"
+# shellcheck source=lib/common.sh
+. "$SELECTA_ROOT/lib/common.sh"
+# shellcheck source=lib/state.sh
+. "$SELECTA_ROOT/lib/state.sh"
+t_eq "a new install is offered the command" "1" \
+	"$(selecta_segment_lines_plain stopped "" "" "" "" | cut -f1 | grep -c '/selecta play')"
+t_eq "the offer is the same at every width" "3" \
+	"$(selecta_segment_lines_plain stopped "" "" "" "" | tr '\t' '\n' | grep -c '/selecta play')"
 
 # --- the installed copy has to keep up with the plugin ------------------------
 # settings.json runs a copy at ~/.claude/selecta/statusline.sh, not the file in
