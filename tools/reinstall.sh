@@ -33,6 +33,21 @@ else
 		sort | tr '\n' ' ')
 fi
 
+_src=$(jq -r --arg m "$MARKET" \
+	'.[$m].source.source // "unknown"' \
+	"$HOME/.claude/plugins/known_marketplaces.json" 2>/dev/null)
+
+if [ "$_src" = github ]; then
+	printf 'The %s marketplace points at GitHub, not this folder.\n' "$MARKET" >&2
+	printf 'Installing would give you the published code, not your edits.\n\n' >&2
+	printf 'To test this working tree instead:\n\n' >&2
+	printf '  claude plugin marketplace remove %s\n' "$MARKET" >&2
+	printf '  claude plugin marketplace add %s\n\n' "$ROOT" >&2
+	printf 'Or run the binaries directly, which always use this tree:\n\n' >&2
+	printf '  ./plugins/selecta/bin/selecta play ambient\n' >&2
+	exit 1
+fi
+
 printf 'reinstalling from %s\n\n' "$ROOT"
 
 # Refuse to install something that will not load. A broken manifest installs

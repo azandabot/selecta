@@ -312,6 +312,16 @@ tools/reinstall.sh              # both plugins
 tools/reinstall.sh selecta      # just the one
 ```
 
+This only works while the marketplace points at your working tree. Adding it
+from GitHub replaces that silently, and then a reinstall gives you the
+published code while looking like it gave you your edits, so the script checks
+and refuses rather than misleading you:
+
+```bash
+claude plugin marketplace remove azandabot-selecta
+claude plugin marketplace add /path/to/your/clone
+```
+
 It validates the manifests first, deletes the cached copy, reinstalls, and
 diffs the result against the tree so a silent partial install cannot pass.
 Restart the session afterwards: skills, commands and hooks are read at session
