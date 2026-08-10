@@ -38,6 +38,37 @@ for _t in "sponono by kabza de small" \
 	t_eq "\"$_t\" routes to youtube" "youtube" "$(route "$_t")"
 done
 
+# --- the phrasings that shipped broken ---------------------------------------
+# "song", "track" and "album" used to force YouTube, and the check ran before
+# the resolver was consulted at all. So "some chill songs for coding" opened a
+# window while the catalogue was sitting on a confident match for it, and
+# "play me a song" -- which is how people ask for background music -- did too.
+#
+# The first line here is verbatim from a real session. It opened a window,
+# then spent a minute and eight commands failing to recover.
+for _m in "some max aura song cause I am about to lock in" \
+	"play me a song" \
+	"some chill songs for coding" \
+	"put a track on" \
+	"aura farming music" \
+	"music for staring at a wall" \
+	"hard techno for the gym"; do
+	t_eq "\"$_m\" is background music, not a title" "radio" "$(route "$_m")"
+done
+
+# A genre the offline catalogue knows scores as badly as an unknown title --
+# both land around 0.1 -- so confidence cannot separate them and the
+# vocabulary has to. One word is always a genre: nobody names a track in one.
+for _m in "drum and bass" "log drum" phonk hyperpop; do
+	t_eq "\"$_m\" is a genre, so no window" "radio" "$(route "$_m")"
+done
+
+# Naming an artist stays the one unambiguous signal.
+for _t in "rottweiler by essdeekid" "tyla water" "bohemian rhapsody" \
+	"kabza de small sponono"; do
+	t_eq "\"$_t\" names a recording" "youtube" "$(route "$_t")"
+done
+
 # --- the important negative -------------------------------------------------
 # A long ambient request must not trip the word-count heuristic into opening a
 # window, because the whole point of radio is that it stays out of the way.
