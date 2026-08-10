@@ -64,6 +64,15 @@ t_eq "colored by default" "$(printf '\033[2mCOLORED\033[0m')" "$(run 40)"
 t_eq "NO_COLOR uses the plain variant" "PLAIN" "$(NO_COLOR=1 run 40)"
 t_eq "TERM=dumb uses the plain variant" "PLAIN" "$(TERM=dumb run 40)"
 
+# --- the first-run hint retires itself ------------------------------------------
+# Someone who has never played anything gets an affordance in the bar. Someone
+# who has gets an empty bar when nothing is playing. The two states used to be
+# decided by timing, which showed up as a flicker.
+t_eq "a new install is offered the command" "1" "$(
+	rm -f "$SELECTA_HOME/.played-once"
+	selecta_segment_lines_plain stopped "" "" "" "" | cut -f1 | grep -c '/selecta play'
+)"
+
 # --- the installed copy has to keep up with the plugin ------------------------
 # settings.json runs a copy at ~/.claude/selecta/statusline.sh, not the file in
 # the plugin. The copy is what lets a versioned install path stay valid, but

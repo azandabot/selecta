@@ -116,10 +116,23 @@ if selecta_ipc_up; then
 	touch -t "$(date -u -r $(($(date +%s) - 3600)) +%Y%m%d%H%M.%S 2>/dev/null ||
 		date -u -d @$(($(date +%s) - 3600)) +%Y%m%d%H%M.%S)" \
 		"$SELECTA_RUN/idle-since" 2>/dev/null
+	# Clearing must be final. The hint and the clear used to fight: render the
+	# hint, clear it a minute later, notice the segment is empty, render the
+	# hint again. On a two-second refresh that is a permanent flicker, and a
+	# brand new install is exactly the state it happens in.
+	_flicker=0
+	_fi=0
+	while [ "$_fi" -lt 6 ]; do
+		sleep 1
+		[ -s "$SELECTA_SEGMENT" ] && _flicker=$((_flicker + 1))
+		_fi=$((_fi + 1))
+	done
+
 	t_eq "an idle bar clears itself" "true" \
 		"$(wait_for '[ ! -s "$SELECTA_SEGMENT" ]' 40 && echo true || echo false)"
 	t_eq "and the launcher then prints nothing" "" \
 		"$(COLUMNS=100 sh "$SELECTA_ROOT/statusline/launcher.sh" </dev/null)"
+	t_eq "a cleared bar stays cleared rather than flickering" "0" "$_flicker"
 fi
 
 # --- teardown -----------------------------------------------------------------

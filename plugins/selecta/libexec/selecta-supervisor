@@ -298,16 +298,21 @@ sup_write_foreign() {
 # worse than an empty one, and it is what "stuck" looks like to a user.
 SELECTA_IDLE_CLEAR=${SELECTA_IDLE_CLEAR:-60}
 
-sup_idle_segment() {
-	_is_mark=$SELECTA_RUN/idle-since
-	[ -f "$_is_mark" ] || : >"$_is_mark"
+# Outside run/, which is wiped between sessions: "has this person ever played
+# anything" is a property of the install, not of this session.
+SELECTA_PLAYED_EVER=$SELECTA_HOME/.played-once
 
-	if [ ! -s "$SELECTA_SEGMENT" ]; then
+sup_idle_segment() {
+	if [ ! -f "$SELECTA_PLAYED_EVER" ]; then
+		[ -s "$SELECTA_SEGMENT" ] && return 0
 		_is_plain=$(selecta_segment_lines_plain stopped "" "" "" "") || return 0
 		selecta_segment_render "$_is_plain" stopped
 		return 0
 	fi
 
+	_is_mark=$SELECTA_RUN/idle-since
+	[ -f "$_is_mark" ] || : >"$_is_mark"
+	[ -s "$SELECTA_SEGMENT" ] || return 0
 	_is_age=$(($(date +%s) - $(selecta_file_mtime "$_is_mark")))
 	[ "$_is_age" -lt "$SELECTA_IDLE_CLEAR" ] && return 0
 	# Empty, not deleted: the launcher treats an empty segment as "print
@@ -315,8 +320,12 @@ sup_idle_segment() {
 	: >"$SELECTA_SEGMENT"
 }
 
-# Anything actually playing means the idle clock has not started.
-sup_playing_now() { rm -f "$SELECTA_RUN/idle-since" 2>/dev/null || true; }
+# Anything actually playing means the idle clock has not started, and retires
+# the first-run hint for good.
+sup_playing_now() {
+	rm -f "$SELECTA_RUN/idle-since" 2>/dev/null || true
+	[ -f "$SELECTA_PLAYED_EVER" ] || : >"$SELECTA_PLAYED_EVER" 2>/dev/null || true
+}
 
 if [ "$MODE" = once ]; then
 	sup_tick
