@@ -62,6 +62,7 @@ selecta - background music for your coding sessions
 
   selecta                       what is playing, and this repo's crate
   selecta play [mood]           resolve and play; no argument resumes this repo
+  selecta play --tags "a,b" <q>  play by genre when a mood does not resolve
   selecta resume                this repo's top-ranked source
   selecta pause | go            pause, unpause
   selecta next                  next source in this repo's rotation
@@ -371,10 +372,23 @@ cmd_status() {
 cmd_play() {
 	_cp_force=''
 	_cp_args=''
+	# --tags is what turns a failed vibe into one more command instead of a
+	# guessing game. Without it the caller had to resolve, read the id back,
+	# and pass it to play -- and play cannot take a networked station id, so
+	# that last step failed and the improvising started.
+	_cp_tags=''
+	_cp_want_tags=0
 	for _cp_a in "$@"; do
+		if [ "$_cp_want_tags" -eq 1 ]; then
+			_cp_tags=$_cp_a
+			_cp_want_tags=0
+			continue
+		fi
 		case $_cp_a in
 		--yt | --youtube) _cp_force=yt ;;
 		--radio) _cp_force=radio ;;
+		--tags) _cp_want_tags=1 ;;
+		--tags=*) _cp_tags=${_cp_a#--tags=} ;;
 		*) _cp_args="$_cp_args${_cp_args:+ }$_cp_a" ;;
 		esac
 	done
@@ -386,6 +400,16 @@ cmd_play() {
 		return $?
 	fi
 	selecta_ensure_dirs || selecta_die "$EX_UNWRITABLE" "cannot write to $SELECTA_HOME"
+
+	if [ -n "$_cp_tags" ]; then
+		_cp_res=$(selecta_resolve_net "$_cp_q" "$_cp_tags")
+		_cp_status=$(printf '%s' "$_cp_res" | jq -r .status)
+		if [ "$_cp_status" = ok ]; then
+			play_source "$(printf '%s' "$_cp_res" | jq -c '.candidates[0]')"
+			return $?
+		fi
+		selecta_die "$EX_NOTFOUND" "no station for tags \"$_cp_tags\""
+	fi
 
 	_cp_res=$(selecta_resolve "$_cp_q")
 	_cp_status=$(printf '%s' "$_cp_res" | jq -r .status)
@@ -416,7 +440,13 @@ cmd_play() {
 			printf 'Closest:\n' >&2
 			printf '%s' "$_cp_res" | jq -r '.candidates[0:3][] | "  \(.id)  \(.title)"' >&2
 		fi
-		printf 'Browse instead: selecta stations\n' >&2
+		# A dead end here is what made callers improvise. One of them burned
+		# eight commands and a minute guessing after this line, because
+		# nothing told it what the next move was.
+		printf '\nIf that described a feeling rather than named a station,\n' >&2
+		printf 'translate it into genre words and play those directly:\n\n' >&2
+		printf '  selecta play --tags "genre,genre" "%s"\n\n' "$_cp_q" >&2
+		printf 'Or see what exists: selecta stations\n' >&2
 		exit "$EX_NOTFOUND"
 	fi
 

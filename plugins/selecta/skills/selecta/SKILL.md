@@ -65,8 +65,13 @@ selecta resolve --json "<the user's words>"
 ```
 
 - `status: "ok"` — `selecta play` will land it. Just play it.
-- `status: "none"` — nothing matched. Say so, offer `selecta stations`. Do not
-  guess.
+- `status: "none"` — nothing in the catalogue matched. If the request named a
+  recording, say so and stop. If it described a *feeling* — "max aura", "aura
+  farming", "music for staring at a wall" — **rewrite it into genre vocabulary
+  and resolve again**, exactly as for `ambiguous` below. Most vibes land here
+  rather than in `ambiguous`, and treating them as a dead end is what makes a
+  simple request turn into a string of failing commands. Give up only after a
+  rewrite has also failed, and then offer `selecta stations`.
 - `status: "ambiguous"` — no confident station, but `hint_tags` carries
   vocabulary the networked catalogues understand. **Rewrite the request into
   catalogue vocabulary and resolve again** rather than giving up or settling for

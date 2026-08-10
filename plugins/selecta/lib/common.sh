@@ -190,7 +190,9 @@ selecta_lock_reap_stale() {
 		;;
 	esac
 	if selecta_pid_is_supervisor "$_lk_pid"; then
-		return 1
+		# Held by a live supervisor. Nothing to reap, and not an error: this
+		# is what a healthy machine looks like.
+		return 0
 	fi
 	selecta_log warn "clearing stale lock from pid $_lk_pid"
 	selecta_lock_release

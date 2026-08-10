@@ -123,6 +123,17 @@ if command -v mpv >/dev/null 2>&1; then
 		t_empty "a losing supervisor prints nothing" "$OUT"
 		t_eq "the first supervisor still holds the lock" "yes" \
 			"$([ -d "$SELECTA_LOCKDIR" ] && echo yes || echo no)"
+
+		# A live supervisor holding the lock is a healthy machine, not an
+		# error. Reporting it as one killed every caller: `selecta play`
+		# exited 1 and printed nothing, and with the status line installed a
+		# supervisor is always up, so that was every play.
+		t_eq "reaping against a live supervisor is not an error" "0" "$(
+			selecta_lock_reap_stale
+			echo $?
+		)"
+		t_eq "and it leaves the running supervisor's lock alone" "yes" \
+			"$([ -d "$SELECTA_LOCKDIR" ] && echo yes || echo no)"
 	fi
 
 	sh "$TD" 2>/dev/null
