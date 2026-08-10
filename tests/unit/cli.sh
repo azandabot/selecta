@@ -67,6 +67,27 @@ t_eq "uninstall --purge without confirmation exits 7" "7" "$(code uninstall --pu
 t_eq "uninstall --purge without confirmation keeps the home" "yes" \
 	"$([ -d "$SELECTA_HOME" ] && echo yes || echo no)"
 
+# --- the status line install has to read as success ---------------------------
+# It told people to restart, so they restarted, and the feature they had just
+# switched on looked broken until they did. The host re-reads settings.json
+# live. The author of this tool read the old wording as a failure.
+_sl_dry=$(printf '' | "$S" statusline on 2>&1 || true)
+t_eq "the dry run says it is step one, not a refusal" "1" \
+	"$(printf '%s' "$_sl_dry" | grep -c 'Step 1 of 2')"
+t_eq "the dry run leads with what it does" "1" \
+	"$(printf '%s' "$_sl_dry" | grep -c 'puts what you are playing in your status bar')"
+t_eq "nothing tells the user to restart" "0" \
+	"$(printf '%s' "$_sl_dry" | grep -ci 'restart')"
+
+_sl_done=$("$S" statusline on --user-confirmed 2>&1 || true)
+t_eq "confirming reports it is already live" "1" \
+	"$(printf '%s' "$_sl_done" | grep -c 'no restart needed')"
+t_eq "and never asks for a restart" "0" \
+	"$(printf '%s' "$_sl_done" | grep -c 'Restart or open a new session')"
+t_eq "it names how to undo" "1" \
+	"$(printf '%s' "$_sl_done" | grep -c 'Undo any time with')"
+"$S" statusline off >/dev/null 2>&1 || true
+
 # --- doctor must survive the thing it diagnoses -----------------------------
 NOJQ=$(t_path_without jq)
 _d_out=$(PATH=$NOJQ "$S" doctor </dev/null 2>/tmp/selecta-cli-djq.err)

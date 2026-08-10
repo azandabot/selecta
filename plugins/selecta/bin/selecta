@@ -142,6 +142,30 @@ ensure_player() {
 	selecta_mpv_wait 200 || selecta_die "$EX_MISSING_DEP" "player did not start. Run: selecta doctor"
 }
 
+# The status line needs a poller, not a player. Reading Spotify or Apple Music
+# works on a machine with no mpv at all, so this must not go near
+# selecta_engine the way ensure_player does.
+ensure_supervisor() {
+	selecta_ensure_dirs || return 1
+	_es_pid=''
+	[ -r "$SELECTA_PIDFILE" ] &&
+		IFS= read -r _es_pid <"$SELECTA_PIDFILE" 2>/dev/null
+	case ${_es_pid:-} in
+	'' | *[!0-9]*) _es_pid='' ;;
+	esac
+	if [ -n "${_es_pid:-}" ] && kill -0 "$_es_pid" 2>/dev/null; then
+		return 0
+	fi
+	selecta_lock_reap_stale
+	: >"$SELECTA_HEARTBEAT"
+	if selecta_have setsid; then
+		setsid "$SELECTA_ROOT/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
+	else
+		nohup "$SELECTA_ROOT/libexec/selecta-supervisor" --detached </dev/null >/dev/null 2>&1 &
+	fi
+	return 0
+}
+
 # Resolves a source id to a live URL. The resolver, never the caller, decides
 # what URL a name maps to.
 stream_for() {
@@ -633,7 +657,12 @@ cmd_statusline() {
 			exit "$EX_UNWRITABLE"
 			;;
 		esac
-		printf 'selecta would add this to %s:\n\n%s\n' \
+		# The old copy opened on what it had declined to do, so a deliberate
+		# pause read as a dead end: the author of this tool read it as broken.
+		# Say what it is, show the change, then ask.
+		printf 'This puts what you are playing in your status bar.\n'
+		printf 'Step 1 of 2 — nothing has changed yet.\n\n'
+		printf 'It would add this to %s:\n\n%s\n' \
 			"$(selecta_sl_settings_path)" "$(selecta_sl_preview)"
 		printf '\nTwo things worth knowing first:\n'
 		printf '  • Setting a status line hides most of the built-in footer key hints.\n'
@@ -645,7 +674,40 @@ cmd_statusline() {
 			selecta_confirm y 'Add it? [y/N] ' 'selecta statusline on --user-confirmed' || return $?
 		fi
 		_sl_mode=$(selecta_sl_install) || selecta_die "$EX_UNWRITABLE" "could not write settings"
-		printf 'Installed (%s mode). Restart or open a new session to see it.\n' "$_sl_mode"
+
+		# It said restart, so people restarted, and the thing they had just
+		# switched on looked broken until they did. The host re-reads
+		# settings.json while the session is running; measured, the line shows
+		# up within a couple of seconds.
+		#
+		# Two seconds of nothing still reads as failure, so the bar is made
+		# true before success is claimed: drop whatever a previous session
+		# left behind, start the poller, and wait for a real line to exist.
+		# state.json remembers the last track so a pause keeps its label, which
+		# means a fresh install opens on something that stopped days ago. The
+		# crates are the durable record; this file is session scratch, and the
+		# supervisor rewrites it from the live player within a tick.
+		rm -f "$SELECTA_SEGMENT" "$SELECTA_STATE" "$SELECTA_RUN/idle-since" \
+			2>/dev/null || true
+		ensure_supervisor 2>/dev/null || true
+		# Waiting on the file existing is not the same as waiting on it having
+		# something to show: the first version printed an empty preview under
+		# a heading promising one.
+		_sl_i=0
+		_sl_line=''
+		while [ "$_sl_i" -lt 50 ]; do
+			_sl_line=$(sed -n 2p "$SELECTA_SEGMENT" 2>/dev/null | cut -f2)
+			[ -n "$_sl_line" ] && break
+			_sl_i=$((_sl_i + 1))
+			sleep 0.1
+		done
+
+		printf '\nDone (%s mode). It is live now, no restart needed.\n' "$_sl_mode"
+		if [ -n "$_sl_line" ]; then
+			printf '\nYour status line, bottom right:\n\n  %s\n' "$_sl_line"
+		fi
+		printf '\nIt follows Spotify, Apple Music, and anything selecta plays.\n'
+		printf 'Undo any time with: selecta statusline off\n'
 		;;
 	off)
 		selecta_sl_uninstall || selecta_die "$EX_UNWRITABLE" "could not write settings"
