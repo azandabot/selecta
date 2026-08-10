@@ -182,6 +182,9 @@ selecta_state_write() {
 			 else ($prev.last // null) end ) }') || return 1
 
 	printf '%s\n' "$_st_doc" | selecta_atomic_write "$SELECTA_STATE" || return 1
+	# The caller owns the bar when it says so. Used by the idle path, which
+	# decides between the first-run hint, holding the last line, and clearing.
+	[ "${SELECTA_STATE_QUIET:-0}" = 1 ] && return 0
 	selecta_segment_write "$_st_doc"
 }
 

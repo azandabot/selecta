@@ -252,7 +252,8 @@ sup_tick() {
 			return 0
 		fi
 		if [ -z "$_t_path" ] || [ "$_t_path" = null ]; then
-			sup_refresh stopped
+			SELECTA_STATE_QUIET=1 sup_refresh stopped
+			SELECTA_STATE_QUIET=0
 			sup_idle_segment
 		elif [ "$_t_paused" = true ]; then
 			sup_playing_now
@@ -301,6 +302,8 @@ SELECTA_IDLE_CLEAR=${SELECTA_IDLE_CLEAR:-60}
 # Outside run/, which is wiped between sessions: "has this person ever played
 # anything" is a property of the install, not of this session.
 SELECTA_PLAYED_EVER=$SELECTA_HOME/.played-once
+SELECTA_STATE_QUIET=0
+export SELECTA_STATE_QUIET
 
 sup_idle_segment() {
 	if [ ! -f "$SELECTA_PLAYED_EVER" ]; then
